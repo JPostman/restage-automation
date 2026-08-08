@@ -51,21 +51,19 @@ AI/Chat and extension auto-updates are disabled in the temporary automation user
 
 ## Inspector
 
-`npm start` owns the single Playwright connection to VS Code. After all configured automation steps complete it opens Playwright Inspector from that same connection. This is important for VS Code webviews such as **ReSTage API Schema**, because the original connection already owns the webview frame and can inspect controls inside it.
+The project uses one Inspector implementation: `src/inspect.ts`.
 
-While `npm start` is still running, a second terminal can request Inspector without creating another Playwright/CDP session:
+While the automation VS Code window is running, use:
 
 ```bash
 npm run inspect
 ```
 
-To explicitly verify/focus a ReSTage webview before Inspector opens, pass its iframe title:
+This attaches a Playwright protocol client to the browser binding published by the running automation and opens Playwright Inspector without launching a second VS Code window. Because Inspector runs in its own helper process, it can also open while the main automation is stopped on a TypeScript/Node debugger breakpoint.
 
-```bash
-npm run inspect -- "ReSTage API Schema"
-```
+Tests can call `await restage.inspect()`. The main automation launches the same `inspect.ts` helper and waits until Inspector is resumed/closed.
 
-The running automation logs how many inspectable controls it can see in that webview before opening Inspector. `npm run inspect` does not delete the demo project, install the VSIX, launch another VS Code window, or create a second Playwright browser connection.
+In VS Code **Run and Debug**, choose **Playwright Inspector (Anytime)** for the manual Inspector command.
 
 ## Test resources
 
@@ -77,3 +75,15 @@ const schema = resources.text('openapi.yaml');
 const uploadPath = resources.file('sample.json');
 resources.assertText(actualFile, 'expected-output.txt');
 ```
+
+## VS Code debugging
+
+This project includes `.vscode/launch.json` and `.vscode/tasks.json` for TypeScript breakpoints.
+
+1. Open the `restage-automation` folder in VS Code.
+2. Set a breakpoint in any file under `src/tests/`.
+3. Open **Run and Debug** (`Ctrl+Shift+D`).
+4. Choose **ReSTage: Debug All Tests** or **ReSTage: Debug Test Class**.
+5. Press `F5` to debug, or `Ctrl+F5` to run without debugging.
+
+**ReSTage: Debug Test Class** lets you choose `wizard`, `actions`, `schema`, `environment`, or `rml`. Earlier stages required to create the expected ReSTage UI state run automatically before the selected class. Source maps map `dist` JavaScript back to the original `.ts` files, so breakpoints belong in `src/tests/*.ts`.

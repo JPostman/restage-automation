@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import net from 'node:net';
-import { createServer, type Server } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
@@ -25,6 +24,17 @@ const EXTENSIONS_DIR = path.join(RUN_ROOT, 'extensions');
 const VSCODE_SETTINGS = path.join(PROJECT_ROOT, '.vscode', 'settings.json');
 const RUNTIME_STATE = path.join(PROJECT_ROOT, '.restage-automation.json');
 const INSPECTABLE_SELECTOR = ['[data-testid]', 'button', 'input', 'textarea', 'select', 'a', '[role]'].join(', ');
+
+type TestTarget = 'all' | 'wizard' | 'actions' | 'schema' | 'environment' | 'rml';
+
+function testTarget(): TestTarget {
+  const value = (process.env.RESTAGE_TEST_TARGET ?? 'all').trim().toLowerCase();
+  const supported: TestTarget[] = ['all', 'wizard', 'actions', 'schema', 'environment', 'rml'];
+  if (!supported.includes(value as TestTarget)) {
+    throw new Error(`Unsupported RESTAGE_TEST_TARGET: ${value}`);
+  }
+  return value as TestTarget;
+}
 
 function log(message: string): void {
   console.log(`[ReSTage Automation] ${message}`);
@@ -299,7 +309,7 @@ async function openReStage(restage: ReStage): Promise<Frame> {
   throw new Error(`Project Wizard with #projectFolder was not found after ${attempts} ReSTage icon clicks.`);
 }
 
-function writeRuntimeState(cdpEndpoint: string, vscodePid: number | undefined, inspectorEndpoint: string): void {
+function writeRuntimeState(cdpEndpoint: string, playwrightEndpoint: string, vscodePid: number | undefined): void {
   fs.writeFileSync(
     RUNTIME_STATE,
     `${JSON.stringify(
@@ -307,7 +317,7 @@ function writeRuntimeState(cdpEndpoint: string, vscodePid: number | undefined, i
         ownerPid: process.pid,
         vscodePid: vscodePid ?? null,
         cdpEndpoint,
-        inspectorEndpoint,
+        playwrightEndpoint,
         startedAt: new Date().toISOString(),
       },
       null,
@@ -315,64 +325,6 @@ function writeRuntimeState(cdpEndpoint: string, vscodePid: number | undefined, i
     )}\n`,
     'utf8',
   );
-  log(`Inspector control endpoint published: ${inspectorEndpoint}`);
-}
-
-async function startInspectorServer(restage: ReStage): Promise<{ server: Server; endpoint: string }> {
-  let inspectorBusy = false;
-
-  const server = createServer((request, response) => {
-    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-
-    if (request.method !== 'POST' || url.pathname !== '/inspect') {
-      response.statusCode = 404;
-      response.end('Not found');
-      return;
-    }
-
-    if (inspectorBusy) {
-      response.statusCode = 409;
-      response.end('Inspector is already open');
-      return;
-    }
-
-    const frameTitle = url.searchParams.get('frame')?.trim() || undefined;
-    inspectorBusy = true;
-
-    response.statusCode = 202;
-    response.end('Inspector requested');
-
-    setImmediate(() => {
-      void inspect(restage, frameTitle)
-        .catch((error: unknown) => {
-          console.error(`[ReSTage Inspector] FAILED: ${error instanceof Error ? error.stack || error.message : String(error)}`);
-        })
-        .finally(() => {
-          inspectorBusy = false;
-        });
-    });
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => resolve());
-  });
-
-  const address = server.address();
-  if (!address || typeof address === 'string') {
-    server.close();
-    throw new Error('Could not start Inspector control server.');
-  }
-
-  return {
-    server,
-    endpoint: `http://127.0.0.1:${address.port}`,
-  };
-}
-
-async function closeServer(server: Server | undefined): Promise<void> {
-  if (!server) return;
-  await new Promise<void>((resolve) => server.close(() => resolve()));
 }
 
 function clearRuntimeState(): void {
@@ -388,7 +340,7 @@ function clearRuntimeState(): void {
 }
 
 async function waitForVsCodeToClose(cdpEndpoint: string): Promise<void> {
-  log('READY. VS Code will stay running. In another terminal run: npm run inspect');
+  log('READY. VS Code will stay running. Run `npm run inspect` anytime, including while this process is stopped on a debugger breakpoint.');
   while (true) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     try {
@@ -409,48 +361,6 @@ function cleanupRunDirectory(): void {
     // A future run uses a different directory, so cleanup failure is harmless.
     log(`Could not delete isolated run directory yet: ${error instanceof Error ? error.message : String(error)}`);
   }
-}
-
-/**
- * Opens Playwright Inspector from the SAME Playwright session that owns VS Code.
- * This matters for VS Code webviews: attaching a second CDP Playwright process can
- * see the editor tab but its locator picker may not instrument an existing webview.
- *
- * When frameTitle is supplied we first verify the webview is present and log how
- * many interactive/testable elements Playwright can already see inside it.
- */
-async function inspect(restage: ReStage, frameTitle?: string): Promise<void> {
-  if (frameTitle) {
-    const frame = await restage.frameByTitle(frameTitle);
-    await frame.locator('body').waitFor({ state: 'visible', timeout: TIMEOUT_MS });
-    const count = await frame.locator(INSPECTABLE_SELECTOR).count();
-    console.log(`[ReSTage Inspector] Target webview: ${frameTitle} (${count} inspectable components visible to Playwright)`);
-  } else {
-    const summaries: string[] = [];
-
-    for (const frame of restage.page.frames()) {
-      if (frame === restage.page.mainFrame() || frame.isDetached()) continue;
-
-      try {
-        const iframe = await frame.frameElement();
-        const title = (await iframe.getAttribute('title'))?.trim();
-        if (!title) continue;
-
-        const count = await frame.locator(INSPECTABLE_SELECTOR).count();
-        summaries.push(`${title}: ${count}`);
-      } catch {
-        // VS Code can replace a webview frame while its editor is changing.
-      }
-    }
-
-    if (summaries.length > 0) {
-      console.log(`[ReSTage Inspector] Webviews visible to Playwright: ${summaries.join(', ')}`);
-    }
-  }
-
-  console.log('[ReSTage Inspector] Opening Inspector in the original Playwright session.');
-  await restage.page.pause();
-  console.log('[ReSTage Inspector] Inspector resumed/closed.');
 }
 
 async function main(): Promise<void> {
@@ -521,15 +431,25 @@ async function main(): Promise<void> {
     timeout: TIMEOUT_MS,
     slowMo: ACTION_DELAY_MS,
   });
-  let inspectorServer: Server | undefined;
+
+  // Re-export this exact Playwright Browser over the Playwright protocol.
+  // The Inspector connects to this endpoint instead of opening a second raw
+  // CDP connection, so VS Code webview/OOPIF frame information is preserved.
+  const browserBinding = await browser.bind(`restage-automation-${process.pid}`, {
+    host: '127.0.0.1',
+    port: 0,
+    workspaceDir: PROJECT_ROOT,
+  });
+  log(`Playwright Inspector endpoint published: ${browserBinding.endpoint}`);
+
+  let restage: ReStage | undefined;
+
   try {
     const page = await workbenchPage(browser);
-    const restage = new ReStage(page);
+    restage = new ReStage(page, openInspector);
     const resources = new Resources();
 
-    const inspectorControl = await startInspectorServer(restage);
-    inspectorServer = inspectorControl.server;
-    writeRuntimeState(cdpEndpoint, child.pid, inspectorControl.endpoint);
+    writeRuntimeState(cdpEndpoint, browserBinding.endpoint, child.pid);
     const wizard = await openReStage(restage);
 
     const projectFolder = wizard.locator('#projectFolder');
@@ -543,11 +463,23 @@ async function main(): Promise<void> {
     const schemaTest = new SchemaTest(restage, resources);
     const environmentTest = new EnvironmentTest(restage);
     const rmlTest = new RmlTest(restage);
+    const target = testTarget();
+
+    log(`Test target: ${target === 'all' ? 'all tests' : target}`);
 
     await wizardTest.init();
-    await actionsTest.init();
-    await schemaTest.init();
+    if (target === 'wizard') {
+      log('WizardTest completed.');
+      return;
+    }
 
+    await actionsTest.init();
+    if (target === 'actions') {
+      log('ActionsTest completed.');
+      return;
+    }
+
+    await schemaTest.init();
     await schemaTest.changeLabel(0, 0, 'Get Auth User');
     await schemaTest.changeLabel(0, 1, 'Login user');
     await schemaTest.changeLabel(0, 2, 'Refresh token');
@@ -559,23 +491,65 @@ async function main(): Promise<void> {
       '{ "username" : "{{username}}", "password" : "emilyspass", "expiresInMins" : 30 }',
       '{\n  "username" : "{{username}}",\n  "password" : "{{password}}",\n  "expiresInMins" : {{expiresInMins}}\n}',
     );
+    if (target === 'schema') {
+      log('SchemaTest completed.');
+      return;
+    }
 
     await environmentTest.init();
+    if (target === 'environment') {
+      log('EnvironmentTest completed.');
+      return;
+    }
+
     await rmlTest.init();
+    if (target === 'rml') {
+      log('RmlTest completed.');
+      return;
+    }
+
+    await actionsTest.toggleAIMesssageBot();
+    await actionsTest.runTestWithAIEngine();
+    await actionsTest.runMavenTest();
 
     log('All tests completed. Opening Playwright Inspector in the original Playwright session.');
-    log('You can also run `npm run inspect` from another terminal at any time while this VS Code session is running.');
+    log('You can also run `npm run inspect` while the automation VS Code window is running.');
 
     // Keep Inspector on the same Playwright connection that created and already
     // sees the VS Code webviews. This allows the locator picker to traverse the
     // ReSTage API Schema frame instead of attaching a second CDP session.
-    await inspect(restage, 'ReSTage API Schema');
+    await restage.inspect();
 
     log('Inspector closed. VS Code will remain open until you close the automation window.');
     await waitForVsCodeToClose(cdpEndpoint);
+  } catch (error: unknown) {
+    console.error(`[ReSTage Automation] FAILED: ${error instanceof Error ? error.stack || error.message : String(error)}`);
+    process.exitCode = 1;
+
+    // Do not tear down the browser on a test failure. Keep the exact failed UI
+    // state alive, open Playwright Inspector, and let the user investigate.
+    if (restage && child.exitCode === null) {
+      log('Failure detected. Keeping VS Code and the Playwright session alive.');
+      log('Opening Playwright Inspector at the failed state. Press Resume when you are done inspecting.');
+
+      try {
+        await restage.inspect();
+        log('Failure Inspector resumed/closed. VS Code will remain open until you close the automation window.');
+      } catch (inspectorError: unknown) {
+        console.error(`[ReSTage Automation] Failure Inspector could not open: ${inspectorError instanceof Error ? inspectorError.stack || inspectorError.message : String(inspectorError)}`);
+        log('VS Code will still remain open so the failed state is not terminated automatically.');
+      }
+
+      await waitForVsCodeToClose(cdpEndpoint);
+    }
   } finally {
-    await closeServer(inspectorServer);
     clearRuntimeState();
+
+    try {
+      await browser.unbind();
+    } catch {
+      // Binding may already be gone if VS Code closed.
+    }
 
     try {
       await browser.close();
@@ -602,3 +576,58 @@ await main().catch((error: unknown) => {
   console.error(`[ReSTage Automation] FAILED: ${error instanceof Error ? error.stack || error.message : String(error)}`);
   process.exitCode = 1;
 });
+
+/**
+ * Opens Playwright Inspector in a helper process connected to the browser
+ * binding published by this automation session. The helper exits only after
+ * Inspector is resumed/closed, so callers can safely await this function.
+ */
+async function openInspector(): Promise<void> {
+  const inspectorScript = path.join(PROJECT_ROOT, 'dist', 'src', 'inspect.js');
+  if (!fs.existsSync(inspectorScript)) {
+    throw new Error(`Inspector helper was not built: ${inspectorScript}`);
+  }
+
+  const inspectorEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    PWDEBUG: '1',
+  };
+
+  // Do not inherit VS Code js-debug configuration in the helper process.
+  delete inspectorEnv.NODE_OPTIONS;
+  delete inspectorEnv.VSCODE_INSPECTOR_OPTIONS;
+  delete inspectorEnv.NODE_INSPECT_RESUME_ON_START;
+
+  log('Opening Playwright Inspector.');
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+
+    const settle = (error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      if (error) reject(error);
+      else resolve();
+    };
+
+    const inspector = spawn(process.execPath, [inspectorScript], {
+      cwd: PROJECT_ROOT,
+      env: inspectorEnv,
+      stdio: 'inherit',
+      shell: false,
+    });
+
+    inspector.once('error', (error) => {
+      settle(new Error(`Playwright Inspector could not start: ${error.message}`));
+    });
+
+    inspector.once('exit', (code, signal) => {
+      if (code === 0) {
+        settle();
+        return;
+      }
+
+      settle(new Error(`Playwright Inspector exited unexpectedly (code=${code ?? '<none>'}, signal=${signal ?? '<none>'}).`));
+    });
+  });
+}

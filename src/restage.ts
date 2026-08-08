@@ -1,6 +1,4 @@
 import type { Frame, Locator, Page } from 'playwright-core';
-import { frameByTitle as findFrameByTitle } from './support/frames.js';
-
 export type { Frame, Locator, Page } from 'playwright-core';
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -10,11 +8,34 @@ function show(locator: Locator): string {
 }
 
 export class ReStage {
-  constructor(public readonly page: Page) {}
+  constructor(
+    public readonly page: Page,
+    private readonly openInspector: () => Promise<void>,
+  ) {}
+
+  /**
+   * Opens Playwright Inspector and waits until Inspector is resumed/closed.
+   */
+  async inspect(breakpoint = false): Promise<void> {
+    if (breakpoint) {
+      debugger;
+    }
+
+    console.log('[UI] pause Playwright Inspector');
+
+    await this.openInspector();
+
+    console.log('[UI] resume Playwright Inspector');
+  }
 
   async click(locator: Locator, button: 'left' | 'right' | 'middle' = 'left'): Promise<void> {
     console.log(`[UI] click ${show(locator)} - ${button}`);
-    await locator.click({ button: button });
+    await locator.click({ button });
+  }
+
+  async check(locator: Locator): Promise<void> {
+    console.log(`[UI] check ${show(locator)}`);
+    await locator.check();
   }
 
   async fill(locator: Locator, value: string, valueOut: boolean = true): Promise<void> {
@@ -32,12 +53,33 @@ export class ReStage {
     await locator.selectOption(value);
   }
 
+  async scroll(locator: Locator): Promise<void> {
+    console.log(`[UI] scroll ${show(locator)}`);
+    await locator.scrollIntoViewIfNeeded();
+  }
+
   async waitVisible(locator: Locator, timeout = DEFAULT_TIMEOUT_MS): Promise<void> {
     console.log(`[UI] wait ${show(locator)} timeout=${timeout}ms`);
     await locator.waitFor({ state: 'visible', timeout });
   }
 
   async frameByTitle(title: string, timeout = DEFAULT_TIMEOUT_MS): Promise<Frame> {
-    return await findFrameByTitle(this.page, title, timeout);
+    const deadline = Date.now() + timeout;
+
+    while (Date.now() < deadline) {
+      for (const frame of this.page.frames()) {
+        if (frame === this.page.mainFrame() || frame.isDetached()) continue;
+        try {
+          const iframe = await frame.frameElement();
+          if ((await iframe.getAttribute('title')) === title) {
+            return frame;
+          }
+        } catch {
+          // VS Code can replace webview frames while a view is opening.
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    throw new Error(`Frame not found: ${title}`);
   }
 }
