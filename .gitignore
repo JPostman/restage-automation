@@ -1,0 +1,6 @@
+node_modules/
+dist/
+restage-studio.vsix
+package-lock.json
+
+.restage-automation.json

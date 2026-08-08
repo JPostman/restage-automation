@@ -1,0 +1,6 @@
+{
+  "restageStudio.debug.enabled": true,
+  "restageStudio.debug.console": true,
+  "restageStudio.engine.mode": "remote",
+  "restageStudio.engine.serverUrl": "http://127.0.0.1:62354"
+}
