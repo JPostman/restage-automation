@@ -1,0 +1,641 @@
+---
+openapi: "3.1.0"
+info:
+  title: "ReStage Test Server"
+  description: "Deterministic REST endpoints for testing JPostman request mutations,\
+    \ cache chains, variables, auth, headers, query parameters, paths, and bodies."
+  version: "0.1.0"
+servers:
+- url: "http://127.0.0.1:8091"
+  description: "Generated server url"
+tags:
+- name: "Auth"
+  description: "Authentication chain used to test cached response dependencies."
+- name: "Chain"
+  description: "Small stateful chain for cache, response-path, variables, and dynamic\
+    \ URL tests."
+- name: "Echo"
+  description: "Covers method, path, query, header, auth, and body mutation features."
+- name: "Status"
+  description: "Deterministic status-code and validation scenarios."
+paths:
+  /auth/me:
+    get:
+      tags:
+      - "Auth"
+      summary: "Get current authenticated user"
+      operationId: "me"
+      parameters:
+      - name: "Authorization"
+        in: "header"
+        required: false
+        schema:
+          type: "string"
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+              example:
+                id: 1
+                username: "emilys"
+                email: "emilys@restage.local"
+                firstName: "Emily"
+                lastName: "Johnson"
+                role: "admin"
+        "401":
+          description: "Unauthorized"
+          content:
+            application/json:
+              example:
+                message: "Access token is required"
+  /auth/login:
+    post:
+      tags:
+      - "Auth"
+      summary: "Login user and get access/refresh tokens"
+      operationId: "login"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            examples:
+              Valid login:
+                description: "Valid login"
+                value:
+                  username: "emilys"
+                  password: "emilyspass"
+                  expiresInMins: 30
+        required: true
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+              example:
+                accessToken: "access-emilys-1001"
+                refreshToken: "refresh-emilys-1002"
+                expiresInSeconds: 1800
+                user:
+                  id: 1
+                  username: "emilys"
+                  email: "emilys@restage.local"
+                  firstName: "Emily"
+                  lastName: "Johnson"
+                  role: "admin"
+  /auth/refresh:
+    post:
+      tags:
+      - "Auth"
+      summary: "Refresh auth session/token"
+      operationId: "refresh"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+            example:
+              refreshToken: "refresh-emilys-1002"
+              expiresInMins: 30
+        required: true
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+              example:
+                accessToken: "access-emilys-1001"
+                refreshToken: "refresh-emilys-1002"
+                expiresInSeconds: 1800
+                user:
+                  id: 1
+                  username: "emilys"
+                  email: "emilys@restage.local"
+                  firstName: "Emily"
+                  lastName: "Johnson"
+                  role: "admin"
+        "403":
+          description: "Forbidden"
+          content:
+            application/json:
+              example:
+                message: "Invalid refresh token"
+  /chain/{chainId}/items/{itemId}:
+    post:
+      tags:
+      - "Chain"
+      summary: "Consume chain dependencies"
+      operationId: "consume"
+      parameters:
+      - name: "chainId"
+        in: "path"
+        required: true
+        schema:
+          type: "string"
+      - name: "itemId"
+        in: "path"
+        required: true
+        schema:
+          type: "string"
+      - name: "token"
+        in: "query"
+        required: true
+        schema:
+          type: "string"
+      - name: "X-Chain-Token"
+        in: "header"
+        required: true
+        schema:
+          type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+              additionalProperties: {}
+            example:
+              source: "#Ref1:data.value"
+              message: "hello"
+              enabled: true
+        required: true
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              example:
+                chainId: "chain-1001"
+                itemId: "item-1002"
+                queryToken: "query-item-1002"
+                headerToken: "header-item-1002"
+                body:
+                  source: "#Ref1:data.value"
+                  message: "hello"
+                  enabled: true
+                resultCode: "accepted-item-1002"
+  /chain/start:
+    post:
+      tags:
+      - "Chain"
+      summary: "Create chain seed"
+      operationId: "start"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+              additionalProperties: {}
+            example:
+              customer: "demo-user"
+              amount: 42
+              flags:
+              - "cache"
+              - "response-path"
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              example:
+                chainId: "chain-1001"
+                itemId: "item-1002"
+                nextPath: "/chain/chain-1001/items/item-1002"
+                queryToken: "query-item-1002"
+                headerToken: "header-item-1002"
+                createdAt: "2026-08-03T15:00:00Z"
+                input:
+                  customer: "demo-user"
+                  amount: 42
+                  flags:
+                  - "cache"
+                  - "response-path"
+  /chain/{chainId}/result:
+    get:
+      tags:
+      - "Chain"
+      summary: "Read nested chain result"
+      operationId: "result"
+      parameters:
+      - name: "chainId"
+        in: "path"
+        required: true
+        schema:
+          type: "string"
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              example:
+                chain:
+                  id: "chain-1001"
+                  active: true
+                data:
+                  value: 42
+                  text: "hello"
+                  flags:
+                  - "a"
+                  - "b"
+                links:
+                  self: "/chain/chain-1001/result"
+                  echo: "/echo/body"
+  /echo/methods/{id}:
+    delete:
+      tags:
+      - "Echo"
+      summary: "Echo all common HTTP methods"
+      operationId: "methods_3"
+      parameters:
+      - name: "id"
+        in: "path"
+        required: true
+        schema:
+          type: "string"
+      - name: "mode"
+        in: "query"
+        required: false
+        schema:
+          type: "string"
+          default: "default"
+      - name: "X-Test-Header"
+        in: "header"
+        required: false
+        schema:
+          type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              example:
+                method: "PATCH"
+                id: "item-1002"
+                mode: "update"
+                testHeader: "header-item-1002"
+                body:
+                  status: "changed"
+                requestUri: "/echo/methods/item-1002"
+    get:
+      tags:
+      - "Echo"
+      summary: "Echo all common HTTP methods"
+      operationId: "methods"
+      parameters:
+      - name: "id"
+        in: "path"
+        required: true
+        schema:
+          type: "string"
+      - name: "mode"
+        in: "query"
+        required: false
+        schema:
+          type: "string"
+          default: "default"
+      - name: "X-Test-Header"
+        in: "header"
+        required: false
+        schema:
+          type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              example:
+                method: "PATCH"
+                id: "item-1002"
+                mode: "update"
+                testHeader: "header-item-1002"
+                body:
+                  status: "changed"
+                requestUri: "/echo/methods/item-1002"
+    patch:
+      tags:
+      - "Echo"
+      summary: "Echo all common HTTP methods"
+      operationId: "methods_4"
+      parameters:
+      - name: "id"
+        in: "path"
+        required: true
+        schema:
+          type: "string"
+      - name: "mode"
+        in: "query"
+        required: false
+        schema:
+          type: "string"
+          default: "default"
+      - name: "X-Test-Header"
+        in: "header"
+        required: false
+        schema:
+          type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              example:
+                method: "PATCH"
+                id: "item-1002"
+                mode: "update"
+                testHeader: "header-item-1002"
+                body:
+                  status: "changed"
+                requestUri: "/echo/methods/item-1002"
+    post:
+      tags:
+      - "Echo"
+      summary: "Echo all common HTTP methods"
+      operationId: "methods_1"
+      parameters:
+      - name: "id"
+        in: "path"
+        required: true
+        schema:
+          type: "string"
+      - name: "mode"
+        in: "query"
+        required: false
+        schema:
+          type: "string"
+          default: "default"
+      - name: "X-Test-Header"
+        in: "header"
+        required: false
+        schema:
+          type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              example:
+                method: "PATCH"
+                id: "item-1002"
+                mode: "update"
+                testHeader: "header-item-1002"
+                body:
+                  status: "changed"
+                requestUri: "/echo/methods/item-1002"
+    put:
+      tags:
+      - "Echo"
+      summary: "Echo all common HTTP methods"
+      operationId: "methods_2"
+      parameters:
+      - name: "id"
+        in: "path"
+        required: true
+        schema:
+          type: "string"
+      - name: "mode"
+        in: "query"
+        required: false
+        schema:
+          type: "string"
+          default: "default"
+      - name: "X-Test-Header"
+        in: "header"
+        required: false
+        schema:
+          type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              example:
+                method: "PATCH"
+                id: "item-1002"
+                mode: "update"
+                testHeader: "header-item-1002"
+                body:
+                  status: "changed"
+                requestUri: "/echo/methods/item-1002"
+  /echo/body:
+    post:
+      tags:
+      - "Echo"
+      summary: "Echo arbitrary JSON body"
+      operationId: "body"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+              additionalProperties: {}
+            example:
+              username: "{{username}}"
+              active: true
+              count: 3
+              nested:
+                selectedKey: "selected-value"
+        required: true
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              example:
+                received:
+                  username: "emilys"
+                  active: true
+                  count: 3
+                  nested:
+                    selectedKey: "selected-value"
+                nested:
+                  selectedKey: "selected-value"
+  /echo/query:
+    get:
+      tags:
+      - "Echo"
+      summary: "Echo query parameters"
+      operationId: "query"
+      parameters:
+      - name: "query"
+        in: "query"
+        required: true
+        schema:
+          type: "object"
+          additionalProperties:
+            type: "string"
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              example:
+                query:
+                  limit: "10"
+                  skip: "0"
+                  select: "id,name"
+  /echo/headers:
+    get:
+      tags:
+      - "Echo"
+      summary: "Echo request headers"
+      operationId: "headers"
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              example:
+                headers:
+                  authorization:
+                  - "Bearer demo-token"
+                  x-test-header:
+                  - "hello"
+  /status/delay/{milliseconds}:
+    get:
+      tags:
+      - "Status"
+      summary: "Return after a bounded delay"
+      operationId: "delay"
+      parameters:
+      - name: "milliseconds"
+        in: "path"
+        required: true
+        schema:
+          type: "integer"
+          format: "int64"
+      responses:
+        "200":
+          description: "OK"
+          content:
+            '*/*':
+              schema:
+                type: "object"
+                additionalProperties: {}
+  /status/{code}:
+    get:
+      tags:
+      - "Status"
+      summary: "Return requested HTTP status"
+      operationId: "status"
+      parameters:
+      - name: "code"
+        in: "path"
+        required: true
+        schema:
+          type: "integer"
+          format: "int32"
+      responses:
+        "200":
+          description: "OK"
+          content:
+            '*/*':
+              schema:
+                type: "object"
+                additionalProperties: {}
+components:
+  schemas:
+    RefreshRequest:
+      type: "object"
+      description: "Refresh token generated by the login or refresh operation."
+      properties:
+        refreshToken:
+          type: "string"
+          example: "refresh-emilys-1002"
+          minLength: 1
+        expiresInMins:
+          type: "integer"
+          format: "int32"
+          default: 30
+          example: 30
+      required:
+      - "refreshToken"
+    TokenResponse:
+      type: "object"
+      properties:
+        accessToken:
+          type: "string"
+          example: "access-emilys-1001"
+        refreshToken:
+          type: "string"
+          example: "refresh-emilys-1002"
+        expiresInSeconds:
+          type: "integer"
+          format: "int64"
+          example: 1800
+        user:
+          $ref: "#/components/schemas/User"
+    User:
+      type: "object"
+      properties:
+        id:
+          type: "integer"
+          format: "int64"
+          example: 1
+        username:
+          type: "string"
+          example: "emilys"
+        email:
+          type: "string"
+          example: "emilys@restage.local"
+        firstName:
+          type: "string"
+          example: "Emily"
+        lastName:
+          type: "string"
+          example: "Johnson"
+        role:
+          type: "string"
+          example: "admin"
+    LoginRequest:
+      type: "object"
+      description: "Credentials and desired token lifetime."
+      properties:
+        username:
+          type: "string"
+          example: "emilys"
+          minLength: 1
+        password:
+          type: "string"
+          format: "password"
+          example: "emilyspass"
+          minLength: 1
+        expiresInMins:
+          type: "integer"
+          format: "int32"
+          default: 30
+          example: 30
+      required:
+      - "password"
+      - "username"
+
