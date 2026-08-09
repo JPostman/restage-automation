@@ -1,4 +1,4 @@
-import { Frame, ReStage } from '../restage.js';
+import { Frame, ReStage } from '../../../restage.js';
 
 export class RmlTest {
   constructor(private readonly restage: ReStage) {}

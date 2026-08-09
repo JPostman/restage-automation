@@ -1,4 +1,4 @@
-import { ReStage } from '../restage.js';
+import { ReStage } from '../../../restage.js';
 
 export class ActionsTest {
   constructor(private readonly restage: ReStage) {}

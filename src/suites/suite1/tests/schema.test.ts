@@ -1,5 +1,5 @@
-import { Frame, Locator, ReStage } from '../restage.js';
-import { Resources } from '../resources.js';
+import { Frame, Locator, ReStage } from '../../../restage.js';
+import { Resources } from '../../../resources.js';
 
 export class SchemaTest {
   constructor(
@@ -23,7 +23,7 @@ export class SchemaTest {
     const apiSchema = await this.getSchema();
     const source = apiSchema.getByTestId('api-schema-source');
     await this.restage.waitVisible(source);
-    await this.restage.fill(source, this.resources.text('openapi.yaml'), false);
+    await this.restage.fill(source, this.resources.resourceFile('openapi.yaml'), false);
 
     const parse = apiSchema.getByTestId('api-schema-parse');
     await this.restage.waitVisible(parse);

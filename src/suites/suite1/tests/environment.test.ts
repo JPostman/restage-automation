@@ -1,4 +1,4 @@
-import { ReStage } from '../restage.js';
+import { ReStage } from '../../../restage.js';
 
 export class EnvironmentTest {
   constructor(private readonly restage: ReStage) {}

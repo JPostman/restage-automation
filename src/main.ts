@@ -5,12 +5,7 @@ import path from 'node:path';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import type { Browser, BrowserContext, Frame, Page } from 'playwright-core';
 import { ReStage } from './restage.js';
-import { Resources } from './resources.js';
-import { WizardTest } from './tests/wizard.test.js';
-import { ActionsTest } from './tests/actions.test.js';
-import { SchemaTest } from './tests/schema.test.js';
-import { EnvironmentTest } from './tests/environment.test.js';
-import { RmlTest } from './tests/rml.test.js';
+import { TestSuites } from './suites/test.suites.js';
 
 const TIMEOUT_MS = 60_000;
 const ACTION_DELAY_MS = Number(process.env.RESTAGE_ACTION_DELAY_MS ?? '1000');
@@ -23,18 +18,6 @@ const USER_DATA_DIR = path.join(RUN_ROOT, 'vscode');
 const EXTENSIONS_DIR = path.join(RUN_ROOT, 'extensions');
 const VSCODE_SETTINGS = path.join(PROJECT_ROOT, '.vscode', 'settings.json');
 const RUNTIME_STATE = path.join(PROJECT_ROOT, '.restage-automation.json');
-const INSPECTABLE_SELECTOR = ['[data-testid]', 'button', 'input', 'textarea', 'select', 'a', '[role]'].join(', ');
-
-type TestTarget = 'all' | 'wizard' | 'actions' | 'schema' | 'environment' | 'rml';
-
-function testTarget(): TestTarget {
-  const value = (process.env.RESTAGE_TEST_TARGET ?? 'all').trim().toLowerCase();
-  const supported: TestTarget[] = ['all', 'wizard', 'actions', 'schema', 'environment', 'rml'];
-  if (!supported.includes(value as TestTarget)) {
-    throw new Error(`Unsupported RESTAGE_TEST_TARGET: ${value}`);
-  }
-  return value as TestTarget;
-}
 
 function log(message: string): void {
   console.log(`[ReSTage Automation] ${message}`);
@@ -446,8 +429,7 @@ async function main(): Promise<void> {
 
   try {
     const page = await workbenchPage(browser);
-    restage = new ReStage(page, openInspector);
-    const resources = new Resources();
+    restage = new ReStage(DEMO_PROJECT, page, openInspector);
 
     writeRuntimeState(cdpEndpoint, browserBinding.endpoint, child.pid);
     const wizard = await openReStage(restage);
@@ -458,59 +440,8 @@ async function main(): Promise<void> {
 
     log(`Project folder entered: ${DEMO_PROJECT}`);
 
-    const wizardTest = new WizardTest(restage);
-    const actionsTest = new ActionsTest(restage);
-    const schemaTest = new SchemaTest(restage, resources);
-    const environmentTest = new EnvironmentTest(restage);
-    const rmlTest = new RmlTest(restage);
-    const target = testTarget();
-
-    log(`Test target: ${target === 'all' ? 'all tests' : target}`);
-
-    await wizardTest.init();
-    if (target === 'wizard') {
-      log('WizardTest completed.');
-      return;
-    }
-
-    await actionsTest.init();
-    if (target === 'actions') {
-      log('ActionsTest completed.');
-      return;
-    }
-
-    await schemaTest.init();
-    await schemaTest.changeLabel(0, 0, 'Get Auth User');
-    await schemaTest.changeLabel(0, 1, 'Login user');
-    await schemaTest.changeLabel(0, 2, 'Refresh token');
-    await schemaTest.openOperation(0, 1);
-    await schemaTest.changeVariable(0, 1, '"emilys"');
-    await schemaTest.changeBody(
-      0,
-      1,
-      '{ "username" : "{{username}}", "password" : "emilyspass", "expiresInMins" : 30 }',
-      '{\n  "username" : "{{username}}",\n  "password" : "{{password}}",\n  "expiresInMins" : {{expiresInMins}}\n}',
-    );
-    if (target === 'schema') {
-      log('SchemaTest completed.');
-      return;
-    }
-
-    await environmentTest.init();
-    if (target === 'environment') {
-      log('EnvironmentTest completed.');
-      return;
-    }
-
-    await rmlTest.init();
-    if (target === 'rml') {
-      log('RmlTest completed.');
-      return;
-    }
-
-    await actionsTest.toggleAIMesssageBot();
-    await actionsTest.runTestWithAIEngine();
-    await actionsTest.runMavenTest();
+    const suites = new TestSuites(restage);
+    await suites.run();
 
     log('All tests completed. Opening Playwright Inspector in the original Playwright session.');
     log('You can also run `npm run inspect` while the automation VS Code window is running.');

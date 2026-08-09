@@ -9,6 +9,7 @@ function show(locator: Locator): string {
 
 export class ReStage {
   constructor(
+    public readonly rootDir: string,
     public readonly page: Page,
     private readonly openInspector: () => Promise<void>,
   ) {}
@@ -17,13 +18,12 @@ export class ReStage {
    * Opens Playwright Inspector and waits until Inspector is resumed/closed.
    */
   async inspect(breakpoint = false): Promise<void> {
-    if (breakpoint) {
-      debugger;
-    }
-
     console.log('[UI] pause Playwright Inspector');
 
     await this.openInspector();
+    if (breakpoint) {
+      debugger;
+    }
 
     console.log('[UI] resume Playwright Inspector');
   }

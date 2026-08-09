@@ -1,4 +1,4 @@
-import { ReStage } from '../restage.js';
+import { ReStage } from '../../../restage.js';
 
 export class WizardTest {
   constructor(private readonly restage: ReStage) {}
@@ -28,5 +28,6 @@ export class WizardTest {
 
     await this.restage.click(wizard.getByTestId('project-wizard-generate-project'));
     await this.restage.waitVisible(page.getByRole('button', { name: 'Project Explorer Section' }));
+    await this.restage.waitVisible(page.getByLabel('RestageDemo.java', { exact: true }).getByText('RestageDemo.java'));
   }
 }

@@ -51,13 +51,9 @@
       "type": "pickString",
       "description": "Choose the test class. Required earlier test stages run first.",
       "options": [
-        "wizard",
-        "actions",
-        "schema",
-        "environment",
-        "rml"
+        "suite1"
       ],
-      "default": "rml"
+      "default": "suite1"
     }
   ]
 }

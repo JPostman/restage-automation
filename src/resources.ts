@@ -1,63 +1,39 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { ReStage } from './restage.js';
 
 export class Resources {
   readonly root: string;
 
-  constructor(root = path.join(process.cwd(), 'resources')) {
-    this.root = path.resolve(root);
+  constructor(private readonly restage: ReStage) {
+    this.root = path.join(process.cwd());
   }
 
-  file(name: string): string {
-    const resolved = path.resolve(this.root, name);
-    const rootPrefix = this.root.endsWith(path.sep) ? this.root : `${this.root}${path.sep}`;
+  loadPath(paths: string): string {
+    return fs.readFileSync(paths, 'utf8');
+  }
 
-    if (resolved !== this.root && !resolved.startsWith(rootPrefix)) {
-      throw new Error(`Resource path escapes resources folder: ${name}`);
-    }
-
+  check(resolved: string, name: string): string {
     if (!fs.existsSync(resolved)) {
       throw new Error(`Resource not found: ${resolved}`);
     }
-
-    return resolved;
+    return path.resolve(resolved, name);
   }
 
-  text(name: string): string {
-    return fs.readFileSync(this.file(name), 'utf8');
+  load(resolved: string, name: string): string {
+    return this.loadPath(this.check(resolved, name));
   }
 
-  bytes(name: string): Buffer {
-    return fs.readFileSync(this.file(name));
+  resourceFile(name: string, normalize: boolean = true): string {
+    return this.normalize(this.load(path.resolve(this.root, 'resources'), name), normalize);
   }
 
-  compareText(actualFile: string, expectedResource: string): boolean {
-    const actual = normalizeText(fs.readFileSync(actualFile, 'utf8'));
-    const expected = normalizeText(this.text(expectedResource));
-    return actual === expected;
+  file(paths: string, name: string, normalize: boolean = true): string {
+    return this.normalize(this.load(path.resolve(this.restage.rootDir, paths), name), normalize);
   }
 
-  assertText(actualFile: string, expectedResource: string): void {
-    if (this.compareText(actualFile, expectedResource)) {
-      return;
-    }
-
-    throw new Error(`File comparison failed:\n` + `  actual:   ${path.resolve(actualFile)}\n` + `  expected: ${this.file(expectedResource)}`);
+  normalize(value: string, normalize: boolean = true): string {
+    if (!normalize) return value;
+    return value.replace(/\r\n/g, '\n').trim();
   }
-
-  compareBytes(actualFile: string, expectedResource: string): boolean {
-    return fs.readFileSync(actualFile).equals(this.bytes(expectedResource));
-  }
-
-  assertBytes(actualFile: string, expectedResource: string): void {
-    if (this.compareBytes(actualFile, expectedResource)) {
-      return;
-    }
-
-    throw new Error(`Binary file comparison failed:\n` + `  actual:   ${path.resolve(actualFile)}\n` + `  expected: ${this.file(expectedResource)}`);
-  }
-}
-
-function normalizeText(value: string): string {
-  return value.replace(/\r\n/g, '\n');
 }
