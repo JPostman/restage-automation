@@ -21,7 +21,7 @@ export class TestSuite1 {
     const rmlTest = new RmlTest(this.restage);
 
     await wizardTest.init();
-    await asserts.wizardCreated();
+    await asserts.validateWizardCreated();
 
     await actionsTest.init();
     await schemaTest.init();
@@ -40,6 +40,14 @@ export class TestSuite1 {
     await environmentTest.init();
 
     await rmlTest.init();
+    await asserts.validateAddAuthFolder();
+    await rmlTest.addLoginUser();
+    await asserts.validateAddLoginUser();
+    await rmlTest.addAuthUser();
+    await asserts.validateAddAuthUser();
+    await rmlTest.addRefreshToken();
+    await asserts.validateAddRefreshToken();
+
     await actionsTest.toggleAIMesssageBot();
     await actionsTest.runTestWithAIEngine();
     await actionsTest.runMavenTest();

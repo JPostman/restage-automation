@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import type { Browser, BrowserContext, Frame, Page } from 'playwright-core';
 import { ReStage } from './restage.js';
-import { TestSuites } from './suites/test.suites.js';
+import { TestSuites, type TestTarget } from './suites/test.suites.js';
 
 const TIMEOUT_MS = 60_000;
 const ACTION_DELAY_MS = Number(process.env.RESTAGE_ACTION_DELAY_MS ?? '1000');
@@ -149,10 +149,12 @@ function readWorkspaceReStageSettings(): Record<string, unknown> {
 }
 
 function prepareTempProject(): void {
-  fs.rmSync(DEMO_PROJECT, { recursive: true, force: true });
-  fs.mkdirSync(EXTENSIONS_DIR, { recursive: true });
-
+  const target = testTarget();
   const userDir = path.join(USER_DATA_DIR, 'User');
+  if (target === 'all' || target === TestSuites.SUITE_1) {
+    fs.rmSync(DEMO_PROJECT, { recursive: true, force: true });
+  }
+  fs.mkdirSync(EXTENSIONS_DIR, { recursive: true });
   fs.mkdirSync(userDir, { recursive: true });
 
   // Copy ReSTage workspace settings into this run's isolated VS Code user profile.
@@ -355,6 +357,9 @@ async function main(): Promise<void> {
   delete process.env.PWDEBUG;
   const { chromium } = await import('playwright-core');
 
+  // Prepare the isolated profile and install ReSTage before VS Code starts.
+  // VS Code reads both its user settings and extension directory at startup;
+  // doing this after spawn leaves the running window without ReSTage loaded.
   prepareTempProject();
   installVsix();
 
@@ -429,7 +434,7 @@ async function main(): Promise<void> {
 
   try {
     const page = await workbenchPage(browser);
-    restage = new ReStage(DEMO_PROJECT, page, openInspector);
+    restage = new ReStage(DEMO_PROJECT, page, testTarget, openInspector);
 
     writeRuntimeState(cdpEndpoint, browserBinding.endpoint, child.pid);
     const wizard = await openReStage(restage);
@@ -507,6 +512,15 @@ await main().catch((error: unknown) => {
   console.error(`[ReSTage Automation] FAILED: ${error instanceof Error ? error.stack || error.message : String(error)}`);
   process.exitCode = 1;
 });
+
+function testTarget(): TestTarget {
+  const value = (process.env.RESTAGE_TEST_TARGET ?? 'all').trim().toLowerCase();
+  const supported: TestTarget[] = ['all', TestSuites.SUITE_1];
+  if (!supported.includes(value as TestTarget)) {
+    throw new Error(`Unsupported RESTAGE_TEST_TARGET: ${value}`);
+  }
+  return value as TestTarget;
+}
 
 /**
  * Opens Playwright Inspector in a helper process connected to the browser

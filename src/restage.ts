@@ -1,3 +1,4 @@
+import type { TestTarget } from './suites/test.suites.js';
 import type { Frame, Locator, Page } from 'playwright-core';
 export type { Frame, Locator, Page } from 'playwright-core';
 
@@ -11,6 +12,7 @@ export class ReStage {
   constructor(
     public readonly rootDir: string,
     public readonly page: Page,
+    public readonly testTarget: () => TestTarget,
     private readonly openInspector: () => Promise<void>,
   ) {}
 
