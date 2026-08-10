@@ -13,14 +13,14 @@ const PROJECT_ROOT = process.cwd();
 const VSIX_PATH = path.join(PROJECT_ROOT, 'restage-studio.vsix');
 const TEMP_ROOT = process.env.TEMP || process.env.TMPDIR || process.env.TMP || os.tmpdir();
 const DEMO_PROJECT = path.join(TEMP_ROOT, 'restage-demo');
-const RUN_ROOT = path.join(TEMP_ROOT, `restage-automation-${process.pid}-${Date.now()}`);
+const RUN_ROOT = path.join(TEMP_ROOT, `restage-automation`);
 const USER_DATA_DIR = path.join(RUN_ROOT, 'vscode');
 const EXTENSIONS_DIR = path.join(RUN_ROOT, 'extensions');
 const VSCODE_SETTINGS = path.join(PROJECT_ROOT, '.vscode', 'settings.json');
 const RUNTIME_STATE = path.join(PROJECT_ROOT, '.restage-automation.json');
 
 function log(message: string): void {
-  console.log(`[ReSTage Automation] ${message}`);
+  console.log(`[Main] ${message}`);
 }
 
 const BENIGN_VSCODE_LOG_PATTERNS: RegExp[] = [
@@ -53,7 +53,7 @@ function vscodeLogSink(): (data: Buffer | string) => void {
     for (const rawLine of lines) {
       const line = rawLine.trim();
       if (isImportantVsCodeLog(line)) {
-        console.error(`[ReSTage Automation] [VS Code Error] ${line}`);
+        console.error(`[Main Error] [VS Code Error] ${line}`);
       }
     }
   };
@@ -459,7 +459,7 @@ async function main(): Promise<void> {
     log('Inspector closed. VS Code will remain open until you close the automation window.');
     await waitForVsCodeToClose(cdpEndpoint);
   } catch (error: unknown) {
-    console.error(`[ReSTage Automation] FAILED: ${error instanceof Error ? error.stack || error.message : String(error)}`);
+    console.error(`[Main Error] FAILED: ${error instanceof Error ? error.stack || error.message : String(error)}`);
     process.exitCode = 1;
 
     // Do not tear down the browser on a test failure. Keep the exact failed UI
@@ -472,7 +472,7 @@ async function main(): Promise<void> {
         await restage.inspect();
         log('Failure Inspector resumed/closed. VS Code will remain open until you close the automation window.');
       } catch (inspectorError: unknown) {
-        console.error(`[ReSTage Automation] Failure Inspector could not open: ${inspectorError instanceof Error ? inspectorError.stack || inspectorError.message : String(inspectorError)}`);
+        console.error(`[Main Error] Failure Inspector could not open: ${inspectorError instanceof Error ? inspectorError.stack || inspectorError.message : String(inspectorError)}`);
         log('VS Code will still remain open so the failed state is not terminated automatically.');
       }
 
@@ -509,14 +509,13 @@ async function main(): Promise<void> {
 }
 
 await main().catch((error: unknown) => {
-  console.error(`[ReSTage Automation] FAILED: ${error instanceof Error ? error.stack || error.message : String(error)}`);
+  console.error(`[Main Error] FAILED: ${error instanceof Error ? error.stack || error.message : String(error)}`);
   process.exitCode = 1;
 });
 
 function testTarget(): TestTarget {
   const value = (process.env.RESTAGE_TEST_TARGET ?? 'all').trim().toLowerCase();
-  const supported: TestTarget[] = ['all', TestSuites.SUITE_1];
-  if (!supported.includes(value as TestTarget)) {
+  if (!TestSuites.SUPPORTED.includes(value as TestTarget)) {
     throw new Error(`Unsupported RESTAGE_TEST_TARGET: ${value}`);
   }
   return value as TestTarget;

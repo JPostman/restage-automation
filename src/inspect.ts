@@ -11,7 +11,7 @@ type RuntimeState = {
 };
 
 function log(message: string): void {
-  console.log(`[ReSTage Inspector] ${message}`);
+  console.log(`[Inspect] ${message}`);
 }
 
 function readRuntimeState(): RuntimeState {

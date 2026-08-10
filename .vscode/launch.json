@@ -51,7 +51,8 @@
       "type": "pickString",
       "description": "Choose the test class. Required earlier test stages run first.",
       "options": [
-        "suite1"
+        "suite1",
+        "suite2"
       ],
       "default": "suite1"
     }

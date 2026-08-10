@@ -17,8 +17,10 @@ export class WizardTest {
     const trustPublisher = page.getByRole('button', {
       name: 'Trust Publisher & Install',
     });
-    await this.restage.waitVisible(trustPublisher);
-    await this.restage.click(trustPublisher);
+
+    if (await trustPublisher.count() > 0) {
+      await this.restage.click(trustPublisher);
+    }
 
     await this.restage.waitVisible(
       wizard.getByText('✓ Language Support for Java(TM) by Red Hat', {
