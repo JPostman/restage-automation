@@ -45,4 +45,15 @@ export class ActionsTest {
     const menu = page.getByRole('button', { name: 'ReSTage action: Open Studio' });
     await this.restage.click(menu);
   }
+
+  async mavenBuildSuccess(): Promise<void> {
+    const terminal = this.restage.page.locator('#terminal');
+    await this.restage.waitFor(
+      () => terminal.innerText(),
+      (text) => {
+        return text?.includes('BUILD SUCCESS') ?? false;
+      },
+      60_000,
+    );
+  }
 }

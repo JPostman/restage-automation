@@ -51,5 +51,12 @@ export class TestSuite1 {
     await actionsTest.toggleAIMesssageBot();
     await actionsTest.runTestWithAIEngine();
     await actionsTest.runMavenTest();
+    await actionsTest.mavenBuildSuccess();
+  }
+
+  async deleteProject(): Promise<void> {
+    const page = this.restage.page;
+    this.restage.click(page.getByRole('button', { name: 'Delete the current project' }));
+    await this.restage.inspect();
   }
 }

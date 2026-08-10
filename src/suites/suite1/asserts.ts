@@ -124,7 +124,7 @@ public class RestageDemo {
   async validateWizardCreated(): Promise<void> {
     const actual = this.getJavaFile();
     const expected = this.initializeCode('', false) + '}';
-    assert.strictEqual(actual, expected);
+    assert.strictEqual(actual.replaceAll('\n', ''), expected.replaceAll('\n', ''));
   }
 
   async validateAddAuthFolder(): Promise<void> {

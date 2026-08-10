@@ -4,7 +4,7 @@ export class EnvironmentTest {
   constructor(private readonly restage: ReStage) {}
 
   private async getSchema() {
-    return this.restage.frameByTitle('ReSTage API Schema');
+    return this.restage.waitFrame('ReSTage API Schema');
   }
 
   async init(): Promise<void> {

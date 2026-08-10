@@ -4,7 +4,7 @@ export class RmlTest {
   constructor(private readonly restage: ReStage) {}
 
   private async getSchema(): Promise<Frame> {
-    return this.restage.frameByTitle('ReSTage API Schema');
+    return this.restage.waitFrame('ReSTage API Schema');
   }
 
   async init(): Promise<void> {

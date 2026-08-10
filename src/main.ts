@@ -228,72 +228,6 @@ async function workbenchPage(browser: Browser): Promise<Page> {
   }, 'Connected to VS Code CDP, but the workbench page was not found.');
 }
 
-async function frameContaining(page: Page, selector: string): Promise<Frame | null> {
-  for (const frame of page.frames()) {
-    try {
-      if ((await frame.locator(selector).count()) > 0) return frame;
-    } catch {
-      // VS Code can replace webview frames while a view is opening.
-    }
-  }
-  return null;
-}
-
-async function waitForFrameContaining(page: Page, selector: string, timeout: number): Promise<Frame | null> {
-  const deadline = Date.now() + timeout;
-
-  while (Date.now() < deadline) {
-    const frame = await frameContaining(page, selector);
-    if (frame) return frame;
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-
-  return null;
-}
-
-async function openReStage(restage: ReStage): Promise<Frame> {
-  const page = restage.page;
-  const existingWizard = await frameContaining(page, '#projectFolder');
-  if (existingWizard) {
-    log('ReSTage Project Wizard is already open.');
-    return existingWizard;
-  }
-
-  // Use a stable locator instead of locator('[aria-label]').nth(...).
-  // VS Code is still rendering during startup, so an nth() index can move
-  // between finding the ReSTage icon and Playwright actually clicking it.
-  const activityItem = page.locator('[aria-label="ReSTage"]:visible');
-  await activityItem.waitFor({ state: 'visible', timeout: TIMEOUT_MS });
-
-  const attempts = 3;
-
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    // The wizard may finish opening between retry attempts. Do not toggle the
-    // Activity Bar item closed if it has appeared in the meantime.
-    const wizardBeforeClick = await frameContaining(page, '#projectFolder');
-    if (wizardBeforeClick) {
-      log(`Opened ReSTage Project Wizard before attempt ${attempt}.`);
-      return wizardBeforeClick;
-    }
-
-    log(`Opening ReSTage (attempt ${attempt}/${attempts})...`);
-    await restage.click(activityItem);
-
-    const wizard = await waitForFrameContaining(page, '#projectFolder', attempt === attempts ? TIMEOUT_MS : 20_000);
-
-    if (wizard) {
-      log(`Opened ReSTage Project Wizard on attempt ${attempt}.`);
-      return wizard;
-    }
-
-    if (attempt < attempts) {
-      log('Project Wizard did not appear; clicking the ReSTage icon again.');
-    }
-  }
-
-  throw new Error(`Project Wizard with #projectFolder was not found after ${attempts} ReSTage icon clicks.`);
-}
-
 function writeRuntimeState(cdpEndpoint: string, playwrightEndpoint: string, vscodePid: number | undefined): void {
   fs.writeFileSync(
     RUNTIME_STATE,
@@ -437,13 +371,6 @@ async function main(): Promise<void> {
     restage = new ReStage(DEMO_PROJECT, page, testTarget, openInspector);
 
     writeRuntimeState(cdpEndpoint, browserBinding.endpoint, child.pid);
-    const wizard = await openReStage(restage);
-
-    const projectFolder = wizard.locator('#projectFolder');
-    await projectFolder.waitFor({ state: 'visible', timeout: TIMEOUT_MS });
-    await restage.fill(projectFolder, DEMO_PROJECT);
-
-    log(`Project folder entered: ${DEMO_PROJECT}`);
 
     const suites = new TestSuites(restage);
     await suites.run();

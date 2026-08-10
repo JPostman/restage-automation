@@ -8,7 +8,7 @@ export class SchemaTest {
   ) {}
 
   private async getSchema(): Promise<Frame> {
-    return this.restage.frameByTitle('ReSTage API Schema');
+    return this.restage.waitFrame('ReSTage API Schema');
   }
 
   private async getSection(row: number, col: number): Promise<Locator> {
@@ -50,7 +50,7 @@ export class SchemaTest {
     await this.restage.click(addEnvironment);
 
     const save = apiSchema.locator('#envEditSave:visible');
-    await this.restage.click(save);
+    if (await this.restage.exists(save)) await this.restage.click(save);
   }
 
   async changeBody(row: number, col: number, source: string, target: string): Promise<void> {

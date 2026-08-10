@@ -5,8 +5,9 @@ export class WizardTest {
 
   async init(): Promise<void> {
     const page = this.restage.page;
-    const wizard = await this.restage.frameByTitle('Project Wizard');
+    const wizard = await this.restage.waitFrame('Project Wizard');
 
+    await this.restage.fill(wizard.getByRole('textbox', { name: 'Project folder' }), this.restage.rootDir);
     await this.restage.fill(wizard.getByRole('textbox', { name: 'groupId' }), 'io.restage');
     await this.restage.fill(wizard.getByRole('textbox', { name: 'artifactId' }), 'automation');
     await this.restage.fill(wizard.getByRole('textbox', { name: 'Class name' }), 'RestageDemo');
@@ -18,8 +19,15 @@ export class WizardTest {
       name: 'Trust Publisher & Install',
     });
 
-    if (await trustPublisher.count() > 0) {
+    try {
+      await trustPublisher.waitFor({
+        state: 'visible',
+        timeout: 1000,
+      });
+
       await this.restage.click(trustPublisher);
+    } catch {
+      // Dialog did not appear — continue.
     }
 
     await this.restage.waitVisible(

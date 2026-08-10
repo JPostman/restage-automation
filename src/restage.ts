@@ -1,8 +1,8 @@
 import type { TestTarget } from './suites/test.suites.js';
-import type { Frame, Locator, Page } from 'playwright-core';
+import type { Frame, FrameLocator, Locator, Page } from 'playwright-core';
 export type { Frame, Locator, Page } from 'playwright-core';
 
-const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_TIMEOUT_MS = 20_000;
 
 function show(locator: Locator): string {
   return locator.toString();
@@ -32,6 +32,11 @@ export class ReStage {
     }
 
     log('resume Playwright Inspector');
+  }
+
+  async exists(locator: Locator): Promise<boolean> {
+    log(`exists ${show(locator)}`);
+    return (await locator.count()) > 0;
   }
 
   async click(locator: Locator, button: 'left' | 'right' | 'middle' = 'left'): Promise<void> {
@@ -69,23 +74,62 @@ export class ReStage {
     await locator.waitFor({ state: 'visible', timeout });
   }
 
-  async frameByTitle(title: string, timeout = DEFAULT_TIMEOUT_MS): Promise<Frame> {
-    const deadline = Date.now() + timeout;
+  async waitExists(locator: Locator, timeout = DEFAULT_TIMEOUT_MS): Promise<void> {
+    log(`wait exists ${show(locator)} timeout=${timeout}ms`);
+    await this.waitFor(
+      () => locator.count(),
+      (count) => count > 0,
+      timeout,
+    );
+  }
 
+  async waitFor<T>(value: () => Promise<T>, condition: (value: T) => boolean | Promise<boolean>, timeout = DEFAULT_TIMEOUT_MS, interval = 250): Promise<T> {
+    const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
-      for (const frame of this.page.frames()) {
-        if (frame === this.page.mainFrame() || frame.isDetached()) continue;
-        try {
-          const iframe = await frame.frameElement();
-          if ((await iframe.getAttribute('title')) === title) {
-            return frame;
-          }
-        } catch {
-          // VS Code can replace webview frames while a view is opening.
-        }
+      const result = await value();
+      if (await condition(result)) {
+        return result;
       }
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await this.page.waitForTimeout(interval);
     }
-    throw new Error(`Frame not found: ${title}`);
+    throw new Error(`waitFor timeout after ${timeout}ms`);
+  }
+
+  async getFrame(title?: string | undefined | null, selector?: string, timeout = DEFAULT_TIMEOUT_MS): Promise<Frame | undefined> {
+    return await this.waitFor(
+      async () => {
+        for (const frame of this.page.frames()) {
+          if (frame === this.page.mainFrame() || frame.isDetached()) {
+            continue;
+          }
+          try {
+            const iframe = await frame.frameElement();
+            const frameTitle = await iframe.getAttribute('title');
+            if (iframe && frameTitle) {
+              if (!title || title === frameTitle) {
+                if (!selector || (await frame.locator(selector).count())) {
+                  return frame;
+                }
+              }
+            }
+          } catch {
+            // Frame may have been replaced.
+          }
+        }
+        return undefined;
+      },
+      (frame) => frame !== undefined,
+      timeout,
+    );
+  }
+
+  async waitFrame(title: string, timeout = DEFAULT_TIMEOUT_MS): Promise<Frame> {
+    return this.waitFor(
+      async () => {
+        return await this.getFrame(title, undefined, timeout);
+      },
+      (frame) => frame !== undefined,
+      timeout,
+    ) as Promise<Frame>;
   }
 }

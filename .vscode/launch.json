@@ -20,7 +20,10 @@
       "env": {
         "RESTAGE_ACTION_DELAY_MS": "500"
       },
-      "autoAttachChildProcesses": false
+      "autoAttachChildProcesses": false,
+      "runtimeArgs": [
+        "--enable-source-maps"
+      ]
     },
     {
       "name": "ReSTage: Debug Test Class",
@@ -42,7 +45,10 @@
         "RESTAGE_ACTION_DELAY_MS": "500",
         "RESTAGE_TEST_TARGET": "${input:restageTestTarget}"
       },
-      "autoAttachChildProcesses": false
+      "autoAttachChildProcesses": false,
+      "runtimeArgs": [
+        "--enable-source-maps"
+      ]
     }
   ],
   "inputs": [
