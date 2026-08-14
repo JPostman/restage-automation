@@ -1,5 +1,5 @@
 import { ReStage } from '../../../restage.js';
-import { Environment } from '../../tests/environment.js';
+import { Environment } from '../../base/environment.js';
 
 export class EnvironmentTest extends Environment {
   constructor(restage: ReStage) {

@@ -4,3 +4,4 @@ restage-studio.vsix
 package-lock.json
 
 .restage-automation.json
+test-results/

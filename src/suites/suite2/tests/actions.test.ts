@@ -1,5 +1,5 @@
 import { ReStage } from '../../../restage.js';
-import { Actions } from '../../tests/actions.js';
+import { Actions } from '../../base/actions.js';
 
 export class ActionsTest extends Actions {
   constructor(restage: ReStage) {
@@ -8,7 +8,6 @@ export class ActionsTest extends Actions {
 
   async init(): Promise<void> {
     await this.open();
-    await this.runMavenTest();
-    await this.mavenBuildSuccess();
+    await this.toogleApiSchema();
   }
 }

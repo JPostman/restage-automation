@@ -5,10 +5,9 @@ import path from 'node:path';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import type { Browser, BrowserContext, Frame, Page } from 'playwright-core';
 import { ReStage } from './restage.js';
-import { TestSuites, type TestTarget } from './suites/test.suites.js';
 
 const TIMEOUT_MS = 60_000;
-const ACTION_DELAY_MS = Number(process.env.RESTAGE_ACTION_DELAY_MS ?? '1000');
+const ACTION_DELAY_MS = Number(process.env.RESTAGE_ACTION_DELAY_MS ?? '0');
 const PROJECT_ROOT = process.cwd();
 const VSIX_PATH = path.join(PROJECT_ROOT, 'restage-studio.vsix');
 const TEMP_ROOT = process.env.TEMP || process.env.TMPDIR || process.env.TMP || os.tmpdir();
@@ -18,9 +17,32 @@ const USER_DATA_DIR = path.join(RUN_ROOT, 'vscode');
 const EXTENSIONS_DIR = path.join(RUN_ROOT, 'extensions');
 const VSCODE_SETTINGS = path.join(PROJECT_ROOT, '.vscode', 'settings.json');
 const RUNTIME_STATE = path.join(PROJECT_ROOT, '.restage-automation.json');
+const STOP_FILE = path.join(PROJECT_ROOT, '.restage-test-stop');
+const TEST_RUNNER_PID = Number(process.env.RESTAGE_TEST_RUNNER_PID ?? '');
+
+type TestTarget = 'all' | 'suite1' | 'suite2';
+
+function testTarget(): TestTarget {
+  const value = (process.env.RESTAGE_TEST_TARGET ?? 'all').trim().toLowerCase();
+  if (value !== 'all' && value !== 'suite1' && value !== 'suite2') {
+    throw new Error(`Unsupported RESTAGE_TEST_TARGET: ${value}`);
+  }
+  return value;
+}
 
 function log(message: string): void {
   console.log(`[Main] ${message}`);
+}
+
+function isProcessRunning(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const BENIGN_VSCODE_LOG_PATTERNS: RegExp[] = [
@@ -151,7 +173,7 @@ function readWorkspaceReStageSettings(): Record<string, unknown> {
 function prepareTempProject(): void {
   const target = testTarget();
   const userDir = path.join(USER_DATA_DIR, 'User');
-  if (target === 'all' || target === TestSuites.SUITE_1) {
+  if (target === 'all' || target === 'suite1') {
     fs.rmSync(DEMO_PROJECT, { recursive: true, force: true });
   }
   fs.mkdirSync(EXTENSIONS_DIR, { recursive: true });
@@ -234,6 +256,7 @@ function writeRuntimeState(cdpEndpoint: string, playwrightEndpoint: string, vsco
     `${JSON.stringify(
       {
         ownerPid: process.pid,
+        runnerPid: Number.isInteger(TEST_RUNNER_PID) && TEST_RUNNER_PID > 0 ? TEST_RUNNER_PID : null,
         vscodePid: vscodePid ?? null,
         cdpEndpoint,
         playwrightEndpoint,
@@ -372,25 +395,45 @@ async function main(): Promise<void> {
 
     writeRuntimeState(cdpEndpoint, browserBinding.endpoint, child.pid);
 
-    const suites = new TestSuites(restage);
-    await suites.run();
+    if (process.env.RESTAGE_SESSION_ONLY !== '1') {
+      throw new Error('This process now provides the shared ReSTage session for Playwright Test. Run `npm test` (or a ReSTage VS Code test configuration).');
+    }
 
-    log('All tests completed. Opening Playwright Inspector in the original Playwright session.');
-    log('You can also run `npm run inspect` while the automation VS Code window is running.');
+    log('ReSTage session ready for Playwright Test.');
+    while (!fs.existsSync(STOP_FILE)) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
 
-    // Keep Inspector on the same Playwright connection that created and already
-    // sees the VS Code webviews. This allows the locator picker to traverse the
-    // ReSTage API Schema frame instead of attaching a second CDP session.
-    await restage.inspect();
+      // A Playwright failure can replace the worker process, and Suite 2 runs
+      // in another worker/project. Keep this owner/UI alive through those
+      // transitions; only the top-level Playwright runner ending shuts it down.
+      if (Number.isInteger(TEST_RUNNER_PID) && TEST_RUNNER_PID > 0 && !isProcessRunning(TEST_RUNNER_PID)) {
+        log('Playwright Test runner exited; shutting down the shared ReSTage session.');
+        break;
+      }
 
-    log('Inspector closed. VS Code will remain open until you close the automation window.');
-    await waitForVsCodeToClose(cdpEndpoint);
+      try {
+        const response = await fetch(`${cdpEndpoint}/json/version`);
+        if (!response.ok) break;
+      } catch {
+        break;
+      }
+    }
+
+    if (fs.existsSync(STOP_FILE)) {
+      fs.rmSync(STOP_FILE, { force: true });
+      log('Playwright Test requested session shutdown.');
+    }
   } catch (error: unknown) {
     console.error(`[Main Error] FAILED: ${error instanceof Error ? error.stack || error.message : String(error)}`);
     process.exitCode = 1;
 
-    // Do not tear down the browser on a test failure. Keep the exact failed UI
-    // state alive, open Playwright Inspector, and let the user investigate.
+    // In Playwright Test session mode, the test worker owns failure reporting
+    // and Inspector. Do not block the global setup process on an Inspector here.
+    if (process.env.RESTAGE_SESSION_ONLY === '1') {
+      return;
+    }
+
+    // Legacy direct-run behavior: keep the exact failed UI state alive.
     if (restage && child.exitCode === null) {
       log('Failure detected. Keeping VS Code and the Playwright session alive.');
       log('Opening Playwright Inspector at the failed state. Press Resume when you are done inspecting.');
@@ -439,14 +482,6 @@ await main().catch((error: unknown) => {
   console.error(`[Main Error] FAILED: ${error instanceof Error ? error.stack || error.message : String(error)}`);
   process.exitCode = 1;
 });
-
-function testTarget(): TestTarget {
-  const value = (process.env.RESTAGE_TEST_TARGET ?? 'all').trim().toLowerCase();
-  if (!TestSuites.SUPPORTED.includes(value as TestTarget)) {
-    throw new Error(`Unsupported RESTAGE_TEST_TARGET: ${value}`);
-  }
-  return value as TestTarget;
-}
 
 /**
  * Opens Playwright Inspector in a helper process connected to the browser

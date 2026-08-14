@@ -5,7 +5,7 @@
       "name": "ReSTage: Debug All Tests",
       "type": "node",
       "request": "launch",
-      "program": "${workspaceFolder}/dist/src/main.js",
+      "program": "${workspaceFolder}/node_modules/@playwright/test/cli.js",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "ReSTage: Build",
       "sourceMaps": true,
@@ -18,18 +18,24 @@
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",
       "env": {
-        "RESTAGE_ACTION_DELAY_MS": "500"
+        "RESTAGE_ACTION_DELAY_MS": "0",
+        "RESTAGE_INSPECT_ON_FAILURE": "0",
+        "RESTAGE_CONTINUE_ON_FAILURE": "1"
       },
-      "autoAttachChildProcesses": false,
+      "autoAttachChildProcesses": true,
       "runtimeArgs": [
         "--enable-source-maps"
+      ],
+      "args": [
+        "test",
+        "--config=dist/src/suites/suites.js"
       ]
     },
     {
       "name": "ReSTage: Debug Test Class",
       "type": "node",
       "request": "launch",
-      "program": "${workspaceFolder}/dist/src/main.js",
+      "program": "${workspaceFolder}/node_modules/@playwright/test/cli.js",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "ReSTage: Build",
       "sourceMaps": true,
@@ -43,11 +49,17 @@
       "internalConsoleOptions": "neverOpen",
       "env": {
         "RESTAGE_ACTION_DELAY_MS": "500",
-        "RESTAGE_TEST_TARGET": "${input:restageTestTarget}"
+        "RESTAGE_TEST_TARGET": "${input:restageTestTarget}",
+        "RESTAGE_INSPECT_ON_FAILURE": "1",
+        "RESTAGE_CONTINUE_ON_FAILURE": "0"
       },
-      "autoAttachChildProcesses": false,
+      "autoAttachChildProcesses": true,
       "runtimeArgs": [
         "--enable-source-maps"
+      ],
+      "args": [
+        "test",
+        "--config=dist/src/suites/suites.js"
       ]
     }
   ],
@@ -55,7 +67,7 @@
     {
       "id": "restageTestTarget",
       "type": "pickString",
-      "description": "Choose the test class. Required earlier test stages run first.",
+      "description": "Choose the Playwright test suite.",
       "options": [
         "suite1",
         "suite2"

@@ -1,5 +1,5 @@
 import { ReStage } from '../../../restage.js';
-import { Wizard } from '../../tests/wizard.js';
+import { Wizard } from '../../base/wizard.js';
 
 export class WizardTest extends Wizard {
   constructor(restage: ReStage) {

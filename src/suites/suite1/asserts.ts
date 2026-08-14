@@ -3,37 +3,15 @@ import { Resources } from '../../resources.js';
 import assert from 'node:assert/strict';
 
 export class Asserts {
-  constructor(
-    private readonly restage: ReStage,
-    private readonly resources: Resources,
-  ) {}
+  private readonly resources: Resources;
 
-  initializeCode(addImport: string): string {
-    return (
-      this.resources.normalize(
-        `
-package io.restage;
-
-import io.jpostman.annotations.JPostman;
-${addImport}
-@JPostman.TestNG
-public class RestageDemo {
-
-    @JPostman.Context
-    JPostman.Runtime<JPostman.Test> runtime;
-
-    @JPostman.ReportContext(
-    	details = true
-    )
-    JPostman.Report report;
-`,
-      ) + '\n\n'
-    );
+  constructor(restage: ReStage) {
+    this.resources = new Resources(restage);
   }
 
   addAuthFolderCode(): string {
     return (
-      this.initializeCode('import org.testng.annotations.Test;\n') +
+      this.resources.tempate('import org.testng.annotations.Test;\n') +
       '\n\t' +
       this.resources.normalize(`@JPostman.Runner(
 		folder = "Auth",
@@ -115,12 +93,12 @@ public class RestageDemo {
   }
 
   getJavaFile(): string {
-    return this.resources.file('src/test/java/io/restage', 'RestageDemo.java');
+    return this.resources.load(this.resources.main());
   }
 
   async validateWizardCreated(): Promise<void> {
     const actual = this.getJavaFile();
-    const expected = this.initializeCode('') + '}';
+    const expected = this.resources.tempate() + '}';
     assert.strictEqual(actual, expected);
   }
 

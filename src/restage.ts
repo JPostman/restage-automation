@@ -1,4 +1,4 @@
-import type { TestTarget } from './suites/test.suites.js';
+import type { TestTarget } from './suites/suites.js';
 import type { Frame, FrameLocator, Locator, Page } from 'playwright-core';
 export type { Frame, FrameLocator, Locator, Page } from 'playwright-core';
 
@@ -32,6 +32,10 @@ export class ReStage {
     }
 
     log('resume Playwright Inspector');
+  }
+
+  async sleep(ms: number = 500): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async exists(locator: Locator): Promise<boolean> {

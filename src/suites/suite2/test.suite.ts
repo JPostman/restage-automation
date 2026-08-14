@@ -1,16 +1,26 @@
-import { ReStage } from '../../restage.js';
+import { test, prepareTestContext, reportTestFailure } from '../suites.js';
 import { Resources } from '../../resources.js';
-import { Asserts } from './asserts.js';
 import { ActionsTest } from './tests/actions.test.js';
 
-export class TestSuite2 {
-  constructor(private readonly restage: ReStage) {}
+test.describe('Suite 2', () => {
+  let _resources: Resources;
+  let _actionsTest: ActionsTest;
 
-  async run(): Promise<void> {
-    const resources = new Resources(this.restage);
-    const asserts = new Asserts(this.restage, resources);
-    const actionsTest = new ActionsTest(this.restage);
+  test.beforeAll(async ({ restage }) => {
+    await prepareTestContext(restage, 'suite2');
+    _resources = new Resources(restage);
+    _actionsTest = new ActionsTest(restage);
+  });
 
-    await actionsTest.init();
-  }
-}
+  test.afterEach(async ({ restage }, testInfo) => {
+    await reportTestFailure(restage, testInfo);
+  });
+
+  test('Prepare Resources', async () => {
+    _resources.writePath(_resources.main(), _resources.tempate() + '}');
+  });
+
+  test('Test Actions', async () => {
+    await _actionsTest.init();
+  });
+});

@@ -1,65 +1,92 @@
-import { ReStage } from '../../restage.js';
-import { Resources } from '../../resources.js';
+import { test, prepareTestContext, reportTestFailure } from '../suites.js';
 import { Asserts } from './asserts.js';
-
 import { WizardTest } from './tests/wizard.test.js';
 import { ActionsTest } from './tests/actions.test.js';
 import { SchemaTest } from './tests/schema.test.js';
 import { EnvironmentTest } from './tests/environment.test.js';
 import { RmlTest } from './tests/rml.test.js';
 import { SettingsTest } from './tests/settings.js';
+import { ReStage } from '../../restage.js';
 
-export class TestSuite1 {
-  constructor(private readonly restage: ReStage) {}
+test.describe('Suite 1', () => {
+  let _restage: ReStage;
+  let _asserts: Asserts;
+  let _wizardTest: WizardTest;
+  let _actionsTest: ActionsTest;
+  let _schemaTest: SchemaTest;
+  let _environmentTest: EnvironmentTest;
+  let _rmlTest: RmlTest;
+  let _settings: SettingsTest;
 
-  async run(): Promise<void> {
-    const resources = new Resources(this.restage);
-    const asserts = new Asserts(this.restage, resources);
-    const wizardTest = new WizardTest(this.restage);
-    const actionsTest = new ActionsTest(this.restage);
-    const schemaTest = new SchemaTest(this.restage, resources);
-    const environmentTest = new EnvironmentTest(this.restage);
-    const rmlTest = new RmlTest(this.restage);
-    const settings = new SettingsTest(this.restage);
+  test.beforeAll(async ({ restage }) => {
+    await prepareTestContext(restage, 'suite1');
 
-    await wizardTest.init();
-    await settings.init();
-    await asserts.validateWizardCreated();
+    _restage = restage;
+    _asserts = new Asserts(restage);
+    _wizardTest = new WizardTest(restage);
+    _actionsTest = new ActionsTest(restage);
+    _schemaTest = new SchemaTest(restage);
+    _environmentTest = new EnvironmentTest(restage);
+    _rmlTest = new RmlTest(restage);
+    _settings = new SettingsTest(restage);
+  });
 
-    await actionsTest.init();
-    await schemaTest.init();
-    await schemaTest.changeLabel(0, 0, 'Get Auth User');
-    await schemaTest.changeLabel(0, 1, 'Login user');
-    await schemaTest.changeLabel(0, 2, 'Refresh token');
-    await schemaTest.openOperation(0, 1);
-    await schemaTest.changeVariable(0, 1, '"emilys"');
-    await schemaTest.changeBody(
+  test.afterEach(async ({ restage }, testInfo) => {
+    await reportTestFailure(restage, testInfo);
+  });
+
+  test('Test Wizard', async () => {
+    await _wizardTest.init();
+  });
+
+  test('Test Settings', async () => {
+    await _settings.init();
+    await _restage.sleep();
+    await _asserts.validateWizardCreated();
+  });
+
+  test('Test Actions', async () => {
+    await _actionsTest.init();
+  });
+
+  test('Test Schema Tab', async () => {
+    await _schemaTest.init();
+    await _schemaTest.changeLabel(0, 0, 'Get Auth User');
+    await _schemaTest.changeLabel(0, 1, 'Login user');
+    await _schemaTest.changeLabel(0, 2, 'Refresh token');
+    await _schemaTest.openOperation(0, 1);
+    await _schemaTest.changeVariable(0, 1, '"emilys"');
+    await _schemaTest.changeBody(
       0,
       1,
       '{ "username" : "{{username}}", "password" : "emilyspass", "expiresInMins" : 30 }',
       '{\n  "username" : "{{username}}",\n  "password" : "{{password}}",\n  "expiresInMins" : {{expiresInMins}}\n}',
     );
+  });
 
-    await environmentTest.init();
+  test('Test Environment Tab', async () => {
+    await _environmentTest.init();
+  });
 
-    await rmlTest.init();
-    await asserts.validateAddAuthFolder();
-    await rmlTest.addLoginUser();
-    await asserts.validateAddLoginUser();
-    await rmlTest.addAuthUser();
-    await asserts.validateAddAuthUser();
-    await rmlTest.addRefreshToken();
-    await asserts.validateAddRefreshToken();
+  test('Test RML Tab', async () => {
+    await _rmlTest.init();
+    await _asserts.validateAddAuthFolder();
+    await _rmlTest.addLoginUser();
+    await _restage.sleep();
+    await _asserts.validateAddLoginUser();
+    await _rmlTest.addAuthUser();
+    await _asserts.validateAddAuthUser();
+    await _rmlTest.addRefreshToken();
+    await _asserts.validateAddRefreshToken();
+  });
 
-    await actionsTest.toggleAIMesssageBot();
-    await actionsTest.runTestWithAIEngine();
-    await actionsTest.runMavenTest();
-    await actionsTest.mavenBuildSuccess();
-  }
+  test('Test AI Engine', async () => {
+    await _actionsTest.toggleAIMesssageBot();
+    await _actionsTest.runTestWithAIEngine();
+  });
 
-  async deleteProject(): Promise<void> {
-    const page = this.restage.page;
-    await this.restage.click(page.getByRole('button', { name: 'Delete the current project' }));
-    await this.restage.inspect();
-  }
-}
+  test('Test Maven Build', async () => {
+    await _actionsTest.runMavenTest();
+    await _actionsTest.mavenBuildSuccess();
+  });
+});

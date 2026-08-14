@@ -1,5 +1,5 @@
 import { ReStage } from '../../../restage.js';
-import { Settings, SettingsTab } from '../../tests/settings.js';
+import { Settings, SettingsTab } from '../../base/settings.js';
 
 export class SettingsTest extends Settings {
   constructor(restage: ReStage) {
@@ -7,7 +7,10 @@ export class SettingsTest extends Settings {
   }
 
   async init(): Promise<void> {
-    await this.restage.click(this.restage.page.getByRole('button', { name: 'Clear Notification (Del)' }));
+    const deleteButton = this.restage.page.getByRole('button', { name: 'Clear Notification (Del)' });
+    if (await this.restage.exists(deleteButton)) {
+      await this.restage.click(deleteButton);
+    }
     await this.open(SettingsTab.RML).wrapLine(true).apply();
   }
 }

@@ -1,0 +1,346 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { defineConfig, test as base, type TestInfo } from '@playwright/test';
+import type { Browser, BrowserContext, Page } from 'playwright-core';
+import { chromium } from 'playwright-core';
+import { ReStage } from '../restage.js';
+import { Wizard } from './base/wizard.js';
+
+const TIMEOUT_MS = 90_000;
+const PROJECT_ROOT = process.cwd();
+const TEMP_ROOT = process.env.TEMP || process.env.TMPDIR || process.env.TMP || os.tmpdir();
+const DEMO_PROJECT = path.join(TEMP_ROOT, 'restage-demo');
+const RUNTIME_STATE = path.join(PROJECT_ROOT, '.restage-automation.json');
+const STOP_FILE = path.join(PROJECT_ROOT, '.restage-test-stop');
+const TEST_RUNNER_PID_ENV = 'RESTAGE_TEST_RUNNER_PID';
+
+function actionDelayMs(): number {
+  const value = Number(process.env.RESTAGE_ACTION_DELAY_MS ?? '0');
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+// The Playwright config is loaded in the runner before workers are spawned.
+// Preserve that runner PID in the inherited environment so the shared ReSTage
+// session can stay alive across worker restarts/projects and shut down only
+// after the full Playwright run exits.
+if (!process.env[TEST_RUNNER_PID_ENV] && process.env.TEST_WORKER_INDEX === undefined) {
+  process.env[TEST_RUNNER_PID_ENV] = String(process.pid);
+}
+
+function log(message: string): void {
+  console.log(`[Suites] ${message}`);
+}
+
+export class TestSuites {
+  static readonly SUITE_1 = 'suite1' as const;
+  static readonly SUITE_2 = 'suite2' as const;
+  static readonly SUPPORTED = ['all', TestSuites.SUITE_1, TestSuites.SUITE_2] as const;
+}
+
+export type TestTarget = (typeof TestSuites.SUPPORTED)[number];
+
+export function testTarget(): TestTarget {
+  const value = (process.env.RESTAGE_TEST_TARGET ?? 'all').trim().toLowerCase();
+  if (!TestSuites.SUPPORTED.includes(value as TestTarget)) {
+    throw new Error(`Unsupported RESTAGE_TEST_TARGET: ${value}`);
+  }
+  return value as TestTarget;
+}
+
+type RuntimeState = {
+  ownerPid?: number;
+  runnerPid?: number;
+  cdpEndpoint?: string;
+  playwrightEndpoint?: string;
+};
+
+type WorkerFixtures = {
+  restage: ReStage;
+};
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isProcessRunning(pid?: number): boolean {
+  if (!pid) return false;
+
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readRuntimeState(): RuntimeState | undefined {
+  if (!fs.existsSync(RUNTIME_STATE)) return undefined;
+  try {
+    return JSON.parse(fs.readFileSync(RUNTIME_STATE, 'utf8')) as RuntimeState;
+  } catch {
+    return undefined;
+  }
+}
+
+function currentRunnerPid(): number | undefined {
+  const value = Number(process.env[TEST_RUNNER_PID_ENV] ?? '');
+  return Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+async function runtimeStateUsable(state: RuntimeState | undefined): Promise<boolean> {
+  const runnerPid = currentRunnerPid();
+  if (!runnerPid || state?.runnerPid !== runnerPid) return false;
+  if (!state.ownerPid || !state.cdpEndpoint || !isProcessRunning(state.ownerPid)) return false;
+
+  try {
+    const response = await fetch(`${state.cdpEndpoint}/json/version`, { signal: AbortSignal.timeout(2_000) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForRuntimeState(ownerPid?: number): Promise<RuntimeState> {
+  const deadline = Date.now() + TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    const state = readRuntimeState();
+    if (state?.playwrightEndpoint && (ownerPid === undefined || state.ownerPid === ownerPid)) {
+      return state;
+    }
+    await delay(250);
+  }
+
+  throw new Error('Timed out waiting for the ReSTage Playwright session to become ready.');
+}
+
+async function waitForRuntimeStateToDisappear(timeout = 30_000): Promise<void> {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (!fs.existsSync(RUNTIME_STATE)) return;
+    await delay(250);
+  }
+}
+
+async function stopSession(): Promise<void> {
+  if (!fs.existsSync(RUNTIME_STATE)) return;
+
+  fs.writeFileSync(STOP_FILE, 'stop\n', 'utf8');
+  await waitForRuntimeStateToDisappear();
+  fs.rmSync(STOP_FILE, { force: true });
+}
+
+async function startSession(sessionTarget: TestTarget): Promise<ChildProcess> {
+  const existingState = readRuntimeState();
+  if (existingState) {
+    if (isProcessRunning(existingState.ownerPid)) {
+      await stopSession();
+    } else {
+      // Stale runtime files must not make the next run wait 30 seconds.
+      fs.rmSync(RUNTIME_STATE, { force: true });
+      fs.rmSync(STOP_FILE, { force: true });
+    }
+  }
+
+  fs.rmSync(STOP_FILE, { force: true });
+  fs.rmSync(RUNTIME_STATE, { force: true });
+
+  const child = spawn(process.execPath, ['--enable-source-maps', path.join(PROJECT_ROOT, 'dist', 'src', 'main.js')], {
+    cwd: PROJECT_ROOT,
+    env: {
+      ...process.env,
+      RESTAGE_SESSION_ONLY: '1',
+      RESTAGE_TEST_TARGET: sessionTarget,
+    },
+    stdio: 'inherit',
+    shell: false,
+  });
+
+  child.once('error', (error) => {
+    console.error(`[Suites] ReSTage session process error: ${error.message}`);
+  });
+
+  await waitForRuntimeState(child.pid);
+  child.unref();
+  return child;
+}
+
+async function workbenchPage(browser: Browser): Promise<Page> {
+  const deadline = Date.now() + TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    const pages = browser.contexts().flatMap((context: BrowserContext) => context.pages());
+    for (const page of pages) {
+      if (page.isClosed()) continue;
+      const count = await page
+        .locator('.monaco-workbench')
+        .count()
+        .catch(() => 0);
+      if (count > 0) return page;
+    }
+    await delay(250);
+  }
+
+  throw new Error('Connected to the ReSTage Playwright session, but the VS Code workbench page was not found.');
+}
+
+async function openInspector(): Promise<void> {
+  const inspectorScript = path.join(PROJECT_ROOT, 'dist', 'src', 'inspect.js');
+  if (!fs.existsSync(inspectorScript)) {
+    throw new Error(`Inspector helper was not built: ${inspectorScript}`);
+  }
+
+  const env: NodeJS.ProcessEnv = { ...process.env, PWDEBUG: '1' };
+  delete env.NODE_OPTIONS;
+  delete env.VSCODE_INSPECTOR_OPTIONS;
+  delete env.NODE_INSPECT_RESUME_ON_START;
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(process.execPath, [inspectorScript], {
+      cwd: PROJECT_ROOT,
+      env,
+      stdio: 'inherit',
+      shell: false,
+    });
+
+    child.once('error', reject);
+    child.once('exit', (code, signal) => {
+      // 0xC000013A is Windows STATUS_CONTROL_C_EXIT. Closing an Inspector
+      // window can end the helper this way; it does not mean the test error
+      // itself was lost.
+      if (code === 0 || (process.platform === 'win32' && code === 0xc000013a)) resolve();
+      else reject(new Error(`Playwright Inspector exited unexpectedly (code=${code ?? '<none>'}, signal=${signal ?? '<none>'}).`));
+    });
+  });
+}
+
+function inspectOnFailure(): boolean {
+  return process.env.RESTAGE_INSPECT_ON_FAILURE === '1';
+}
+
+export async function reportTestFailure(restage: ReStage, testInfo: TestInfo): Promise<void> {
+  if (testInfo.status === testInfo.expectedStatus || testInfo.status === 'skipped') return;
+
+  console.error(`\n[Test] FAIL: ${testInfo.title}`);
+
+  // Print the original error stack before optionally opening Inspector so the
+  // terminal always keeps the TypeScript line and its caller chain.
+  if (testInfo.errors.length === 0) {
+    console.error('[Test] No Playwright error stack was reported.');
+  } else {
+    for (const [index, error] of testInfo.errors.entries()) {
+      const label = testInfo.errors.length > 1 ? `Error ${index + 1}` : 'Error';
+      const details = error.stack ?? error.message ?? error.value ?? 'Unknown test failure';
+      console.error(`[Test] ${label}:\n${details}`);
+    }
+  }
+
+  if (!inspectOnFailure()) {
+    console.error('[Test] Inspector disabled for this run. Continuing to the next test.');
+    return;
+  }
+
+  try {
+    await restage.inspect();
+  } catch (error) {
+    console.error(`[Test] Inspector could not open: ${error instanceof Error ? error.stack || error.message : String(error)}`);
+  }
+}
+
+export const test = base.extend<{}, WorkerFixtures>({
+  restage: [
+    async ({}, use, workerInfo) => {
+      const projectName = workerInfo.project.name;
+      const sessionTarget = projectName === TestSuites.SUITE_2 ? TestSuites.SUITE_2 : TestSuites.SUITE_1;
+
+      let state = readRuntimeState();
+      const canReuse = await runtimeStateUsable(state);
+
+      if (!canReuse) {
+        await startSession(sessionTarget);
+        state = await waitForRuntimeState();
+      } else {
+        log(`Reusing the live ReSTage UI/session for worker ${workerInfo.workerIndex} (${projectName}).`);
+      }
+
+      if (!state?.cdpEndpoint) {
+        throw new Error('The ReSTage session did not publish a CDP endpoint.');
+      }
+
+      // Normal tests attach directly to VS Code's persistent CDP endpoint.
+      // The browser.bind() endpoint is reserved for Playwright Inspector only.
+      // This lets a new Playwright worker/project reconnect without closing or
+      // invalidating the ReSTage UI between tests/suites.
+      const delayMs = actionDelayMs();
+      if (delayMs > 0) {
+        log(`Action delay enabled: ${delayMs}ms`);
+      }
+
+      const browser = await chromium.connectOverCDP(state.cdpEndpoint, {
+        timeout: TIMEOUT_MS,
+        isLocal: true,
+        slowMo: delayMs,
+      });
+
+      try {
+        const page = await workbenchPage(browser);
+        const restage = new ReStage(DEMO_PROJECT, page, testTarget, openInspector);
+        await use(restage);
+      } finally {
+        // Intentionally do not call browser.close() and do not stop the shared
+        // session here. Playwright can replace a worker after a failed test and
+        // uses a different worker for Suite 2. The session owner watches the
+        // Playwright runner PID and shuts the UI down only after the whole run.
+        log(`Worker ${workerInfo.workerIndex} finished; keeping the ReSTage UI/session alive.`);
+      }
+    },
+    { scope: 'worker' },
+  ],
+});
+
+export async function prepareTestContext(restage: ReStage, suite: typeof TestSuites.SUITE_1 | typeof TestSuites.SUITE_2): Promise<void> {
+  log(`Test target: ${testTarget()} (${suite})`);
+
+  const activityItem = restage.page.locator('[aria-label="ReSTage"].uri-icon:visible').first();
+  await restage.waitVisible(activityItem);
+  await restage.click(activityItem);
+
+  const actions = restage.page.getByRole('button', { name: 'Actions Section' });
+  const projectExists = await restage.waitExists(actions, 2_000);
+  if (projectExists) return;
+
+  await restage.waitFrame('Project Wizard');
+
+  if (suite === TestSuites.SUITE_2) {
+    const wizard = new Wizard(restage);
+    await wizard.setProject(restage.rootDir);
+    await wizard.openProject();
+  }
+}
+
+const target = testTarget();
+const suite1 = {
+  name: TestSuites.SUITE_1,
+  testMatch: '**/suite1/test.suite.js',
+};
+const suite2 = {
+  name: TestSuites.SUITE_2,
+  testMatch: '**/suite2/test.suite.js',
+};
+
+const continueOnFailure = process.env.RESTAGE_CONTINUE_ON_FAILURE === '1';
+
+const projects =
+  target === TestSuites.SUITE_1 ? [suite1] : target === TestSuites.SUITE_2 ? [suite2] : continueOnFailure ? [suite1, suite2] : [suite1, { ...suite2, dependencies: [TestSuites.SUITE_1] }];
+
+export default defineConfig({
+  testDir: '.',
+  projects,
+  workers: 1,
+  fullyParallel: false,
+  retries: 0,
+  timeout: 180_000,
+  reporter: 'list',
+});
