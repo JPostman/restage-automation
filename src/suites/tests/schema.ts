@@ -1,30 +1,22 @@
-import { Frame, Locator, ReStage } from '../restage.js';
-import { Resources } from '../resources.js';
+import { FrameLocator, Locator, ReStage } from '../../restage.js';
 
-export class SchemaTest {
-  constructor(
-    private readonly restage: ReStage,
-    private readonly resources: Resources,
-  ) {}
+export class Schema {
+  constructor(protected readonly restage: ReStage) {}
 
-  private async getSchema(): Promise<Frame> {
-    return this.restage.frameByTitle('ReSTage API Schema');
+  protected async getSchema(selector = 'body'): Promise<FrameLocator> {
+    return this.restage.waitFrameLocator('ReSTage API Schema', selector);
   }
 
-  private async getSection(row: number, col: number): Promise<Locator> {
+  protected async getSection(row: number, col: number): Promise<Locator> {
     const apiSchema = await this.getSchema();
     const section = apiSchema.locator(`[data-preview-state-key="root/folder:${row}/operation:${col}"]`);
-    this.restage.waitVisible(section);
+    await this.restage.waitVisible(section);
     await section.scrollIntoViewIfNeeded();
     return section;
   }
 
-  async init(): Promise<void> {
+  async parse(): Promise<void> {
     const apiSchema = await this.getSchema();
-    const source = apiSchema.getByTestId('api-schema-source');
-    await this.restage.waitVisible(source);
-    await this.restage.fill(source, this.resources.text('openapi.yaml'), false);
-
     const parse = apiSchema.getByTestId('api-schema-parse');
     await this.restage.waitVisible(parse);
     await this.restage.click(parse);
@@ -32,9 +24,7 @@ export class SchemaTest {
 
   async openOperation(row: number, col: number): Promise<void> {
     const section = await this.getSection(row, col);
-    if ((await section.getAttribute('open')) === null) {
-      await this.restage.click(section.locator('summary.operation-summary'));
-    }
+    await this.restage.click(section.locator('.operation-summary > .expand-icon'));
     await this.restage.waitVisible(section.locator('.operation-details'));
   }
 
@@ -50,7 +40,7 @@ export class SchemaTest {
     await this.restage.click(addEnvironment);
 
     const save = apiSchema.locator('#envEditSave:visible');
-    await this.restage.click(save);
+    if (await this.restage.exists(save)) await this.restage.click(save);
   }
 
   async changeBody(row: number, col: number, source: string, target: string): Promise<void> {

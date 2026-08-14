@@ -1,16 +1,10 @@
-import { ReStage } from '../restage.js';
+import { ReStage } from '../../restage.js';
 
-export class EnvironmentTest {
-  constructor(private readonly restage: ReStage) {}
+export class Environment {
+  constructor(protected readonly restage: ReStage) {}
 
-  private async getSchema() {
-    return this.restage.frameByTitle('ReSTage API Schema');
-  }
-
-  async init(): Promise<void> {
-    const key = 'hello';
-    await this.add(key, 'world');
-    await this.remove(key);
+  protected async getSchema() {
+    return this.restage.waitFrameLocator('ReSTage API Schema');
   }
 
   async add(key: string, value: string): Promise<void> {

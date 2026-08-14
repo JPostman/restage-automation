@@ -1,0 +1,66 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "ReSTage: Debug All Tests",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/dist/src/main.js",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "ReSTage: Build",
+      "sourceMaps": true,
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "env": {
+        "RESTAGE_ACTION_DELAY_MS": "500"
+      },
+      "autoAttachChildProcesses": false,
+      "runtimeArgs": [
+        "--enable-source-maps"
+      ]
+    },
+    {
+      "name": "ReSTage: Debug Test Class",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/dist/src/main.js",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "ReSTage: Build",
+      "sourceMaps": true,
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "env": {
+        "RESTAGE_ACTION_DELAY_MS": "500",
+        "RESTAGE_TEST_TARGET": "${input:restageTestTarget}"
+      },
+      "autoAttachChildProcesses": false,
+      "runtimeArgs": [
+        "--enable-source-maps"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "restageTestTarget",
+      "type": "pickString",
+      "description": "Choose the test class. Required earlier test stages run first.",
+      "options": [
+        "suite1",
+        "suite2"
+      ],
+      "default": "suite1"
+    }
+  ]
+}
