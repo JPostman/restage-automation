@@ -1,0 +1,32 @@
+import { ReStage } from '../../restage.js';
+
+export class Environment {
+  constructor(protected readonly restage: ReStage) {}
+
+  protected async getSchema() {
+    return this.restage.waitFrameLocator('ReSTage API Schema');
+  }
+
+  async add(key: string, value: string): Promise<void> {
+    const schema = await this.getSchema();
+    await this.restage.click(schema.getByTestId('api-schema-environment-tab'));
+    await this.restage.click(schema.locator('#envAdd'));
+
+    // #envAdd inserts the new blank environment row first.
+    const row = schema.locator('.env-row').first();
+    await this.restage.waitVisible(row);
+    await this.restage.fill(row.locator('.env-key-input'), key, true);
+    await this.restage.fill(row.locator('.env-value-input'), value, true);
+    await this.restage.click(schema.locator('#envSave'));
+  }
+
+  async remove(key: string): Promise<void> {
+    const schema = await this.getSchema();
+    const row = schema.locator('.env-row').filter({
+      has: schema.locator(`.env-key-input[value="${key}"]`),
+    });
+    await this.restage.waitVisible(row);
+    await this.restage.click(row.locator('.env-delete-row'));
+    await this.restage.click(schema.locator('#envSave'));
+  }
+}

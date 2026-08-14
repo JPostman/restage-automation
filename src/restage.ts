@@ -1,6 +1,6 @@
 import type { TestTarget } from './suites/test.suites.js';
 import type { Frame, FrameLocator, Locator, Page } from 'playwright-core';
-export type { Frame, Locator, Page } from 'playwright-core';
+export type { Frame, FrameLocator, Locator, Page } from 'playwright-core';
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 
@@ -74,13 +74,16 @@ export class ReStage {
     await locator.waitFor({ state: 'visible', timeout });
   }
 
-  async waitExists(locator: Locator, timeout = DEFAULT_TIMEOUT_MS): Promise<void> {
+  async waitExists(locator: Locator, timeout = DEFAULT_TIMEOUT_MS): Promise<boolean> {
     log(`wait exists ${show(locator)} timeout=${timeout}ms`);
-    await this.waitFor(
-      () => locator.count(),
-      (count) => count > 0,
-      timeout,
-    );
+    try {
+      await this.waitFor(
+        () => locator.count(),
+        (count) => count > 0,
+        timeout,
+      );
+    } catch (e) {}
+    return await this.exists(locator);
   }
 
   async waitFor<T>(value: () => Promise<T>, condition: (value: T) => boolean | Promise<boolean>, timeout = DEFAULT_TIMEOUT_MS, interval = 250): Promise<T> {
@@ -95,41 +98,119 @@ export class ReStage {
     throw new Error(`waitFor timeout after ${timeout}ms`);
   }
 
-  async getFrame(title?: string | undefined | null, selector?: string, timeout = DEFAULT_TIMEOUT_MS): Promise<Frame | undefined> {
-    return await this.waitFor(
-      async () => {
-        for (const frame of this.page.frames()) {
-          if (frame === this.page.mainFrame() || frame.isDetached()) {
-            continue;
-          }
-          try {
-            const iframe = await frame.frameElement();
-            const frameTitle = await iframe.getAttribute('title');
-            if (iframe && frameTitle) {
-              if (!title || title === frameTitle) {
-                if (!selector || (await frame.locator(selector).count())) {
-                  return frame;
-                }
-              }
-            }
-          } catch {
-            // Frame may have been replaced.
-          }
+  /**
+   * Finds the current VS Code webview Frame by its outer iframe title.
+   *
+   * Do not locate these iframes from page.locator(...): VS Code may host a
+   * webview below another frame, and there can briefly be more than one
+   * iframe with the same title while the webview is being replaced.
+   */
+  async findFrame(title?: string | null, selector?: string): Promise<Frame | undefined> {
+    for (const frame of this.page.frames()) {
+      if (frame === this.page.mainFrame() || frame.isDetached()) {
+        continue;
+      }
+
+      try {
+        if (title) {
+          const actualTitle = await this.frameTitle(frame);
+          if (actualTitle !== title) continue;
         }
+
+        if (selector && (await frame.locator(selector).count()) === 0) {
+          continue;
+        }
+
+        return frame;
+      } catch {
+        // VS Code may replace the webview while we inspect it.
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Returns a live FrameLocator for a VS Code webview.
+   *
+   * The important detail is that the FrameLocator is created from the
+   * frame's actual iframe element in its real parent frame. Using
+   * page.locator('iframe[title=...]') assumes the iframe is in the main
+   * frame and can select a stale duplicate.
+   */
+  async waitFrameLocator(title: string, selector = 'body', timeout = DEFAULT_TIMEOUT_MS): Promise<FrameLocator> {
+    log(`wait frame ${JSON.stringify(title)} selector=${JSON.stringify(selector)} timeout=${timeout}ms`);
+
+    const located = await this.waitFor<FrameLocator | undefined>(
+      async () => {
+        const frame = await this.findFrame(title, selector);
+        if (!frame) return undefined;
+
+        try {
+          // frame.frameElement() returns an ElementHandle, and
+          // ElementHandle.contentFrame() returns Promise<Frame | null>.
+          // For a live FrameLocator we must locate the iframe from its actual
+          // parent frame and call Locator.contentFrame().
+          const parent = frame.parentFrame();
+          if (!parent) return undefined;
+
+          const escapedTitle = title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          const iframes = parent.locator(`iframe[title="${escapedTitle}"]:visible`);
+
+          for (let index = 0, count = await iframes.count(); index < count; index += 1) {
+            const liveFrame = iframes.nth(index).contentFrame();
+            const ready = liveFrame.locator(selector).first();
+
+            if (await ready.isVisible()) {
+              return liveFrame;
+            }
+          }
+        } catch {
+          // The candidate was replaced between discovery and conversion.
+          // Retry against the current frame tree.
+        }
+
         return undefined;
       },
+      (frame) => frame !== undefined,
+      timeout,
+    );
+
+    if (!located) {
+      throw new Error(`Frame not found: ${title}`);
+    }
+
+    return located;
+  }
+
+  async frameTitle(frame: Frame): Promise<string | undefined> {
+    try {
+      const iframe = await frame.frameElement();
+      const title = await iframe.getAttribute('title');
+      if (title) return title;
+    } catch {
+      // VS Code may replace a webview frame while we are inspecting it.
+    }
+
+    try {
+      const title = await frame.title();
+      return title || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async getFrame(title?: string | null, selector?: string, timeout = DEFAULT_TIMEOUT_MS): Promise<Frame | undefined> {
+    return this.waitFor(
+      () => this.findFrame(title, selector),
       (frame) => frame !== undefined,
       timeout,
     );
   }
 
   async waitFrame(title: string, timeout = DEFAULT_TIMEOUT_MS): Promise<Frame> {
-    return this.waitFor(
-      async () => {
-        return await this.getFrame(title, undefined, timeout);
-      },
-      (frame) => frame !== undefined,
-      timeout,
-    ) as Promise<Frame>;
+    const frame = await this.getFrame(title, undefined, timeout);
+    if (!frame) throw new Error(`Frame not found: ${title}`);
+    return frame;
   }
 }

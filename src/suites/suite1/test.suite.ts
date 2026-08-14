@@ -7,6 +7,7 @@ import { ActionsTest } from './tests/actions.test.js';
 import { SchemaTest } from './tests/schema.test.js';
 import { EnvironmentTest } from './tests/environment.test.js';
 import { RmlTest } from './tests/rml.test.js';
+import { SettingsTest } from './tests/settings.js';
 
 export class TestSuite1 {
   constructor(private readonly restage: ReStage) {}
@@ -19,8 +20,10 @@ export class TestSuite1 {
     const schemaTest = new SchemaTest(this.restage, resources);
     const environmentTest = new EnvironmentTest(this.restage);
     const rmlTest = new RmlTest(this.restage);
+    const settings = new SettingsTest(this.restage);
 
     await wizardTest.init();
+    await settings.init();
     await asserts.validateWizardCreated();
 
     await actionsTest.init();
@@ -56,7 +59,7 @@ export class TestSuite1 {
 
   async deleteProject(): Promise<void> {
     const page = this.restage.page;
-    this.restage.click(page.getByRole('button', { name: 'Delete the current project' }));
+    await this.restage.click(page.getByRole('button', { name: 'Delete the current project' }));
     await this.restage.inspect();
   }
 }

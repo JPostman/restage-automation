@@ -8,7 +8,7 @@ export class Asserts {
     private readonly resources: Resources,
   ) {}
 
-  initializeCode(addImport: string, wrap: boolean = true): string {
+  initializeCode(addImport: string): string {
     return (
       this.resources.normalize(
         `
@@ -22,14 +22,11 @@ public class RestageDemo {
     @JPostman.Context
     JPostman.Runtime<JPostman.Test> runtime;
 
-` +
-          (wrap === false
-            ? `    @JPostman.ReportContext(details = true)`
-            : `    @JPostman.ReportContext(
+    @JPostman.ReportContext(
     	details = true
-    )`) +
-          `
-    JPostman.Report report;`,
+    )
+    JPostman.Report report;
+`,
       ) + '\n\n'
     );
   }
@@ -123,8 +120,8 @@ public class RestageDemo {
 
   async validateWizardCreated(): Promise<void> {
     const actual = this.getJavaFile();
-    const expected = this.initializeCode('', false) + '}';
-    assert.strictEqual(actual.replaceAll('\n', ''), expected.replaceAll('\n', ''));
+    const expected = this.initializeCode('') + '}';
+    assert.strictEqual(actual, expected);
   }
 
   async validateAddAuthFolder(): Promise<void> {
