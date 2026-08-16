@@ -43,6 +43,11 @@ export class ReStage {
     return (await locator.count()) > 0;
   }
 
+  async visible(locator: Locator, button: 'left' | 'right' | 'middle' = 'left'): Promise<boolean> {
+    log(`visible ${show(locator)}`);
+    return await locator.isVisible();
+  }
+
   async click(locator: Locator, button: 'left' | 'right' | 'middle' = 'left'): Promise<void> {
     log(`click ${show(locator)} - ${button}`);
     await locator.click({ button });

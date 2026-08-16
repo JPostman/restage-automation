@@ -14,8 +14,7 @@ export class Asserts {
       this.resources.tempate('import org.testng.annotations.Test;\n') +
       '\n\t' +
       this.resources.normalize(`@JPostman.Runner(
-		folder = "Auth",
-		verify = 1
+		folder = "Auth"
 	)
 	@Test
 	public void testAuthRunner() {
@@ -29,7 +28,6 @@ export class Asserts {
       this.addAuthFolderCode() +
       '\n\t' +
       this.resources.normalize(`
-	// ReStage-RML: dependencies
 	@JPostman.Response(
 		id = "Ref1",
 		folder = "Auth",

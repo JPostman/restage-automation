@@ -220,9 +220,39 @@ function inspectOnFailure(): boolean {
   return process.env.RESTAGE_INSPECT_ON_FAILURE === '1';
 }
 
+function inspectOnComplete(): boolean {
+  return process.env.RESTAGE_INSPECT_ON_COMPLETE === '1';
+}
+
+let testFailureReported = false;
+
+/**
+ * Keeps "ReSTage: Debug Test Class" inside an active Playwright hook while
+ * the completion Inspector is open. This is deliberately NOT run from a
+ * worker-fixture teardown: once Playwright starts stopping a worker it only
+ * waits a bounded amount of time for that worker to exit, which conflicts
+ * with an Inspector that the developer may intentionally leave open forever.
+ */
+export async function inspectTestClassOnComplete(restage: ReStage, testInfo: TestInfo): Promise<void> {
+  if (!inspectOnComplete() || testFailureReported) return;
+
+  // beforeAll/afterAll have their own timeout. Zero means this completion hook
+  // may wait for the developer indefinitely; closing/resuming Inspector lets
+  // the hook finish and normal worker teardown then continues.
+  testInfo.setTimeout(0);
+
+  log('Test class finished; opening Playwright Inspector. Close/Resume Inspector to continue shutdown.');
+  try {
+    await restage.inspect();
+  } catch (error) {
+    console.error(`[Suites] Completion Inspector could not open: ${error instanceof Error ? error.stack || error.message : String(error)}`);
+  }
+}
+
 export async function reportTestFailure(restage: ReStage, testInfo: TestInfo): Promise<void> {
   if (testInfo.status === testInfo.expectedStatus || testInfo.status === 'skipped') return;
 
+  testFailureReported = true;
   console.error(`\n[Test] FAIL: ${testInfo.title}`);
 
   // Print the original error stack before optionally opening Inspector so the
@@ -241,6 +271,12 @@ export async function reportTestFailure(restage: ReStage, testInfo: TestInfo): P
     console.error('[Test] Inspector disabled for this run. Continuing to the next test.');
     return;
   }
+
+  // Inspector is intentionally interactive and may stay open for as long as
+  // the developer needs. Disable the current test/afterEach timeout before
+  // waiting for Inspector. Once Inspector is closed/resumed, execution
+  // continues normally.
+  testInfo.setTimeout(0);
 
   try {
     await restage.inspect();
@@ -284,19 +320,20 @@ export const test = base.extend<{}, WorkerFixtures>({
         slowMo: delayMs,
       });
 
+      const page = await workbenchPage(browser);
+      const restage = new ReStage(DEMO_PROJECT, page, testTarget, openInspector);
+
       try {
-        const page = await workbenchPage(browser);
-        const restage = new ReStage(DEMO_PROJECT, page, testTarget, openInspector);
         await use(restage);
       } finally {
-        // Intentionally do not call browser.close() and do not stop the shared
-        // session here. Playwright can replace a worker after a failed test and
-        // uses a different worker for Suite 2. The session owner watches the
-        // Playwright runner PID and shuts the UI down only after the whole run.
-        log(`Worker ${workerInfo.workerIndex} finished; keeping the ReSTage UI/session alive.`);
+        // Completion Inspector is handled by each suite's afterAll hook while
+        // Playwright still considers the suite active. Do not block worker
+        // teardown on user interaction. The session owner watches the runner
+        // PID and shuts the UI down only after the whole Playwright run exits.
+        log(`Worker ${workerInfo.workerIndex} finished; keeping the ReSTage UI/session alive until runner shutdown.`);
       }
     },
-    { scope: 'worker' },
+    { scope: 'worker', timeout: 180_000 },
   ],
 });
 
@@ -308,7 +345,7 @@ export async function prepareTestContext(restage: ReStage, suite: typeof TestSui
   await restage.click(activityItem);
 
   const actions = restage.page.getByRole('button', { name: 'Actions Section' });
-  const projectExists = await restage.waitExists(actions, 2_000);
+  const projectExists = await restage.waitExists(actions, 1_000);
   if (projectExists) return;
 
   await restage.waitFrame('Project Wizard');

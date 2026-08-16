@@ -13,7 +13,6 @@ type MavenExecution = {
 
 export class Actions {
   protected readonly page: Page;
-  private mavenRunStartedAt = 0;
 
   constructor(protected readonly restage: ReStage) {
     this.page = this.restage.page;
@@ -32,8 +31,19 @@ export class Actions {
     const openApiSchema = this.page.getByRole('button', {
       name: 'ReSTage action: Open API Schema',
     });
-    await this.restage.waitVisible(openApiSchema);
-    await this.restage.click(openApiSchema);
+    await this.restage.waitFor(
+      async () => {
+        const frame = await this.restage.findFrame('ReSTage API Schema');
+        if (frame && (await frame.isVisible('#apiSettingsOpen'))) {
+          return true;
+        }
+        if (await this.restage.exists(openApiSchema)) {
+          await this.restage.click(openApiSchema);
+        }
+        return false;
+      },
+      (exists) => exists,
+    );
   }
 
   async toggleAIMesssageBot(): Promise<void> {
@@ -48,12 +58,7 @@ export class Actions {
 
   async runMavenTest(): Promise<void> {
     const menu = this.page.getByRole('button', { name: 'ReSTage action: Run Maven Test' });
-
-    // Mark this run before clicking and remove any result left by a previous run.
-    // mavenBuildSuccess() will only accept a result completed after this timestamp.
-    this.mavenRunStartedAt = Date.now();
     await rm(MAVEN_RESULT_FILE, { force: true }).catch(() => undefined);
-
     await this.restage.click(menu);
   }
 
@@ -65,11 +70,9 @@ export class Actions {
   private async lastMavenExecution(): Promise<MavenExecution | undefined> {
     try {
       const execution = JSON.parse(await readFile(MAVEN_RESULT_FILE, 'utf8')) as MavenExecution;
-
-      if (typeof execution.exitCode !== 'number' || typeof execution.output !== 'string' || typeof execution.completedAt !== 'number' || execution.completedAt < this.mavenRunStartedAt) {
+      if (typeof execution.exitCode !== 'number' || typeof execution.output !== 'string' || typeof execution.completedAt !== 'number') {
         return undefined;
       }
-
       return execution;
     } catch {
       // The Maven run is still in progress, or Studio has not written the result yet.

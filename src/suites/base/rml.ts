@@ -17,11 +17,30 @@ export class Rml {
     await this.restage.click(schema.getByRole('button', { name: 'Expand folders' }));
   }
 
+  async openRmlTab(): Promise<void> {
+    await this.restage.waitFor(
+      async () => {
+        const schema = await this.restage.findFrame('ReSTage API Schema');
+        if (schema) {
+          const rmlTab = schema.getByTestId('api-schema-rml-tab');
+          if (await this.restage.exists(rmlTab)) {
+            await this.restage.click(rmlTab);
+          }
+          if (await this.restage.visible(schema.getByText('REST Modeling Language'))) {
+            return true;
+          }
+        }
+        return false;
+      },
+      (exists) => exists,
+    );
+    await this.restage.sleep();
+  }
+
   async dragAndDropFolder(name: string): Promise<void> {
     const schema = await this.getSchema();
     const testFlow = schema.getByTestId('rml-test-flow');
     const folder = schema.getByTestId(`rml-folder-${name}-drag`);
-
     await this.restage.waitVisible(folder);
     await this.restage.waitVisible(testFlow);
     await this.restage.drag(folder, testFlow);

@@ -7,8 +7,7 @@ export class RmlTest extends Rml {
   }
 
   async init(): Promise<void> {
-    const schema = await this.getSchema();
-    await this.restage.click(schema.getByTestId('api-schema-rml-tab'));
+    await this.openRmlTab();
     await this.dragAndDropFolder('auth');
     await this.collapseFolders();
   }

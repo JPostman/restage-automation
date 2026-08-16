@@ -1,4 +1,4 @@
-import { test, prepareTestContext, reportTestFailure } from '../suites.js';
+import { test, prepareTestContext, reportTestFailure, inspectTestClassOnComplete } from '../suites.js';
 import { Asserts } from './asserts.js';
 import { WizardTest } from './tests/wizard.test.js';
 import { ActionsTest } from './tests/actions.test.js';
@@ -33,6 +33,10 @@ test.describe('Suite 1', () => {
 
   test.afterEach(async ({ restage }, testInfo) => {
     await reportTestFailure(restage, testInfo);
+  });
+
+  test.afterAll(async ({ restage }, testInfo) => {
+    await inspectTestClassOnComplete(restage, testInfo);
   });
 
   test('Test Wizard', async () => {

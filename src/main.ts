@@ -187,6 +187,8 @@ function prepareTempProject(): void {
     'security.workspace.trust.enabled': false,
     'workbench.startupEditor': 'none',
     'window.restoreWindows': 'none',
+    // Open the automation VS Code window maximized.
+    'window.newWindowDimensions': 'maximized',
     'restageStudio.openSidebarOnStartup': false,
     'chat.disableAIFeatures': true,
     'extensions.autoCheckUpdates': false,

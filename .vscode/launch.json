@@ -51,6 +51,7 @@
         "RESTAGE_ACTION_DELAY_MS": "500",
         "RESTAGE_TEST_TARGET": "${input:restageTestTarget}",
         "RESTAGE_INSPECT_ON_FAILURE": "1",
+        "RESTAGE_INSPECT_ON_COMPLETE": "1",
         "RESTAGE_CONTINUE_ON_FAILURE": "0"
       },
       "autoAttachChildProcesses": true,
