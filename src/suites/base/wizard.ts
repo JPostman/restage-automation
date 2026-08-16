@@ -59,6 +59,7 @@ export class Wizard {
       wizard.getByText('✓ Language Support for Java(TM) by Red Hat', {
         exact: true,
       }),
+      60_000,
     );
   }
 

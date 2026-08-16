@@ -27,25 +27,6 @@ export class Actions {
     }
   }
 
-  async toogleApiSchema(): Promise<void> {
-    const openApiSchema = this.page.getByRole('button', {
-      name: 'ReSTage action: Open API Schema',
-    });
-    await this.restage.waitFor(
-      async () => {
-        const frame = await this.restage.findFrame('ReSTage API Schema');
-        if (frame && (await frame.isVisible('#apiSettingsOpen'))) {
-          return true;
-        }
-        if (await this.restage.exists(openApiSchema)) {
-          await this.restage.click(openApiSchema);
-        }
-        return false;
-      },
-      (exists) => exists,
-    );
-  }
-
   async toggleAIMesssageBot(): Promise<void> {
     const menu = this.page.getByRole('button', { name: 'ReSTage action: AI Message Bot' });
     await this.restage.click(menu);

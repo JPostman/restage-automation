@@ -4,6 +4,7 @@ export class Environment {
   constructor(protected readonly restage: ReStage) {}
 
   protected async getSchema() {
+    await this.restage.toogleApiSchema();
     return this.restage.waitFrameLocator('ReSTage API Schema');
   }
 

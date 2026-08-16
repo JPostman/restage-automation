@@ -4,6 +4,7 @@ export class Schema {
   constructor(protected readonly restage: ReStage) {}
 
   protected async getSchema(selector = 'body'): Promise<FrameLocator> {
+    await this.restage.toogleApiSchema();
     return this.restage.waitFrameLocator('ReSTage API Schema', selector);
   }
 

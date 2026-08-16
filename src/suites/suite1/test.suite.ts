@@ -76,7 +76,8 @@ test.describe('Suite 1', () => {
     await _rmlTest.init();
     await _asserts.validateAddAuthFolder();
     await _rmlTest.addLoginUser();
-    await _restage.sleep();
+    await _asserts.validateAddLoginCache();
+    await _rmlTest.loginDepedency();
     await _asserts.validateAddLoginUser();
     await _rmlTest.addAuthUser();
     await _asserts.validateAddAuthUser();

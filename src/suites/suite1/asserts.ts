@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 export class Asserts {
   private readonly resources: Resources;
 
-  constructor(restage: ReStage) {
+  constructor(private readonly restage: ReStage) {
     this.resources = new Resources(restage);
   }
 
@@ -23,7 +23,7 @@ export class Asserts {
     );
   }
 
-  addLoginUserCode(): string {
+  addLoginCacheCode(): string {
     return (
       this.addAuthFolderCode() +
       '\n\t' +
@@ -36,8 +36,16 @@ export class Asserts {
 	)
 	@Test
 	public void login() {
-	}
+	}`) +
+      '\n'
+    );
+  }
 
+  addLoginUserCode(): string {
+    return (
+      this.addLoginCacheCode() +
+      '\n\t' +
+      this.resources.normalize(`
 	@JPostman.Request(
 		id = "Ref2",
 		dependsOn = "#Ref1"
@@ -106,9 +114,20 @@ export class Asserts {
     assert.strictEqual(actual, expected);
   }
 
-  async validateAddLoginUser(): Promise<void> {
+  async validateAddLoginCache(): Promise<void> {
     const actual = this.getJavaFile();
+    const expected = this.addLoginCacheCode() + '}';
+    assert.strictEqual(actual, expected);
+  }
+
+  async validateAddLoginUser(): Promise<void> {
     const expected = this.addLoginUserCode() + '}';
+    let actual = this.getJavaFile();
+    let count = 0;
+    while (count++ < 5 && actual != expected) {
+      actual = this.getJavaFile();
+      await this.restage.sleep();
+    }
     assert.strictEqual(actual, expected);
   }
 

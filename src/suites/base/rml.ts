@@ -4,6 +4,7 @@ export class Rml {
   constructor(protected readonly restage: ReStage) {}
 
   protected async getSchema(): Promise<FrameLocator> {
+    await this.restage.toogleApiSchema();
     return this.restage.waitFrameLocator('ReSTage API Schema');
   }
 
@@ -40,7 +41,7 @@ export class Rml {
   async dragAndDropFolder(name: string): Promise<void> {
     const schema = await this.getSchema();
     const testFlow = schema.getByTestId('rml-test-flow');
-    const folder = schema.getByTestId(`rml-folder-${name}-drag`);
+    const folder = schema.getByTestId(`rml-folder-${name}-drag`).first();
     await this.restage.waitVisible(folder);
     await this.restage.waitVisible(testFlow);
     await this.restage.drag(folder, testFlow);
@@ -59,7 +60,11 @@ export class Rml {
 
   async nodeAction(method: string, action: string): Promise<void> {
     const schema = await this.getSchema();
-    const node = schema.locator(`[data-source-method="${method}"]`);
+    const node = schema.locator(`[data-source-method="${method}"]:visible`);
+    if ((await node.count()) > 1) {
+      await this.restage.exists(node);
+      await this.restage.inspect();
+    }
     await this.restage.waitVisible(node);
     const menu = node.getByRole('button', {
       name: 'Node actions',

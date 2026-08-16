@@ -18,8 +18,6 @@ export class RmlTest extends Rml {
     await this.apply();
     await this.nodeAction('login', 'Run Test');
     await this.runTestDialog();
-    await this.nodeAction('login', 'Actions');
-    await this.loginDepedency();
   }
 
   async addAuthUser(): Promise<void> {
@@ -44,6 +42,7 @@ export class RmlTest extends Rml {
 
   async loginDepedency(): Promise<void> {
     const schema = await this.getSchema();
+    await this.nodeAction('login', 'Actions');
     await this.restage.select(schema.getByLabel('Type', { exact: true }), 'auth');
     await this.restage.click(schema.getByRole('button', { name: 'Select Cache, Response,' }));
     await this.restage.click(schema.getByRole('menuitem', { name: 'Cache Value Read directly' }));

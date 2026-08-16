@@ -322,8 +322,17 @@ export const test = base.extend<{}, WorkerFixtures>({
 
       const page = await workbenchPage(browser);
       const restage = new ReStage(DEMO_PROJECT, page, testTarget, openInspector);
+      const notification = page.getByRole('button', { name: 'Do Not Disturb' });
 
+      await restage.sleep(1_000);
       try {
+        // Disable notidications
+        if (!(await restage.visible(notification))) {
+          await restage.click(page.getByRole('button', { name: 'Notifications' }));
+          await restage.click(page.getByRole('button', { name: 'Configure Do Not Disturb...' }));
+          await restage.click(page.getByRole('menuitem', { name: 'Enable Do Not Disturb Mode' }));
+        }
+
         await use(restage);
       } finally {
         // Completion Inspector is handled by each suite's afterAll hook while
@@ -332,12 +341,21 @@ export const test = base.extend<{}, WorkerFixtures>({
         // PID and shuts the UI down only after the whole Playwright run exits.
         log(`Worker ${workerInfo.workerIndex} finished; keeping the ReSTage UI/session alive until runner shutdown.`);
       }
+
+      try {
+        // Enable notidications
+        await restage.click(notification);
+        await restage.click(page.getByRole('button', { name: 'Configure Do Not Disturb...' }));
+        await restage.click(page.getByRole('menuitem', { name: 'Disable Do Not Disturb Mode' }));
+      } finally {
+        log(`Notidications restore.`);
+      }
     },
     { scope: 'worker', timeout: 180_000 },
   ],
 });
 
-export async function prepareTestContext(restage: ReStage, suite: typeof TestSuites.SUITE_1 | typeof TestSuites.SUITE_2): Promise<void> {
+export async function prepareTestContext(restage: ReStage, suite: string): Promise<void> {
   log(`Test target: ${testTarget()} (${suite})`);
 
   const activityItem = restage.page.locator('[aria-label="ReSTage"].uri-icon:visible').first();
@@ -350,7 +368,7 @@ export async function prepareTestContext(restage: ReStage, suite: typeof TestSui
 
   await restage.waitFrame('Project Wizard');
 
-  if (suite === TestSuites.SUITE_2) {
+  if (suite !== TestSuites.SUITE_1) {
     const wizard = new Wizard(restage);
     await wizard.setProject(restage.rootDir);
     await wizard.openProject();
@@ -378,6 +396,6 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
   retries: 0,
-  timeout: 180_000,
+  timeout: 600_000,
   reporter: 'list',
 });

@@ -9,6 +9,5 @@ export class ActionsTest extends Actions {
   async init(): Promise<void> {
     await this.open();
     await this.restage.waitVisible(this.page.getByRole('tab', { name: 'RestageDemo.java' }));
-    await this.toogleApiSchema();
   }
 }

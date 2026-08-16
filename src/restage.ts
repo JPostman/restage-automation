@@ -24,7 +24,13 @@ export class ReStage {
    * Opens Playwright Inspector and waits until Inspector is resumed/closed.
    */
   async inspect(breakpoint = false): Promise<void> {
-    log('pause Playwright Inspector');
+    const stack = new Error().stack?.split('\n') ?? [];
+    const caller = stack
+      .slice(2)
+      .map((line) => line.trim())
+      .find((line) => !line.includes('ReStage.inspect') && !line.includes('node_modules'));
+
+    log(`pause Playwright Inspector${caller ? ` <- ${caller.replace(/^at /, '')}` : ''}`);
 
     await this.openInspector();
     if (breakpoint) {
@@ -221,5 +227,24 @@ export class ReStage {
     const frame = await this.getFrame(title, undefined, timeout);
     if (!frame) throw new Error(`Frame not found: ${title}`);
     return frame;
+  }
+
+  async toogleApiSchema(): Promise<void> {
+    const openApiSchema = this.page.getByRole('button', {
+      name: 'ReSTage action: Open API Schema',
+    });
+    await this.waitFor(
+      async () => {
+        const frame = await this.findFrame('ReSTage API Schema');
+        if (frame && (await frame.isVisible('#apiSettingsOpen'))) {
+          return true;
+        }
+        if (await this.exists(openApiSchema)) {
+          await this.click(openApiSchema);
+        }
+        return false;
+      },
+      (exists) => exists,
+    );
   }
 }
