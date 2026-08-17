@@ -38,10 +38,14 @@ test.describe('Suite 2', () => {
     await _rmlTest.init();
     await _asserts.validateAddAuthFolder();
     await _rmlTest.addLoginUser();
-    await _restage.sleep();
+    await _asserts.validateAddLoginCache();
+    await _rmlTest.loginDepedency();
     await _asserts.validateAddLoginUser();
     await _rmlTest.addAuthUser();
     await _asserts.validateAddAuthUser();
-    //await _rmlTest.addRefreshToken();
+    await _rmlTest.addRefreshToken();
+    await _asserts.validateAddRefreshToken();
+    await _rmlTest.setRefreshCall();
+    await _asserts.validateSetRefreshCall();
   });
 });

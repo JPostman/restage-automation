@@ -66,7 +66,7 @@ export class Wizard {
   async generateProject(): Promise<void> {
     const wizard = await this.getWizard();
     await this.restage.click(wizard.getByTestId('project-wizard-generate-project'));
-    await this.restage.waitVisible(this.page.getByRole('button', { name: 'Project Explorer Section' }));
+    await this.restage.waitVisible(this.page.getByRole('button', { name: 'Project Explorer Section' }), 60_000);
     await this.restage.waitVisible(this.page.getByLabel('RestageDemo.java', { exact: true }).getByText('RestageDemo.java'));
   }
 

@@ -23,21 +23,36 @@ export class Asserts {
     );
   }
 
-  addLoginUserCode(): string {
+  addLoginCacheCode(original: boolean): string {
     return (
       this.addAuthFolderCode() +
       '\n\t' +
-      this.resources.normalize(`
+      this.resources.normalize(
+        `
 	@JPostman.Response(
 		id = "Ref1",
-		cache = "token",
-		verify = 200,
-		dependsOn = "#username"
+		` +
+          (original
+            ? `folder = "Auth",
+		request = "Login user",
+		cache = "token"`
+            : `cache = "token",
+		dependsOn = "#username"`) +
+          `
 	)
 	public String loginUser() {
 		return runtime.test().path("accessToken");
-	}
+	}`,
+      ) +
+      '\n'
+    );
+  }
 
+  addLoginUserCode(): string {
+    return (
+      this.addLoginCacheCode(false) +
+      '\n\t' +
+      this.resources.normalize(`
 	@JPostman.Request(
 		id = "username",
 		folder = "Auth",
@@ -74,6 +89,43 @@ export class Asserts {
     );
   }
 
+  addRefreshTokenCode(): string {
+    return (
+      this.addAuthUserCode() +
+      '\n\t' +
+      this.resources.normalize(`
+  @JPostman.Response(
+		folder = "Auth",
+		request = "Refresh token"
+	)
+	@Test
+	public void refreshToken() {
+	}`) +
+      '\n'
+    );
+  }
+
+  setRefreshCallCode(): string {
+    return (
+      this.addAuthUserCode() +
+      '\n\t' +
+      this.resources.normalize(`
+  @JPostman.Call(
+		folder = "Auth",
+		request = "Refresh token",
+		dependsOn = "#Ref1"
+	)
+	@Test
+	public void refreshCall() {
+		runtime.call((t /*test*/, i /*info*/) -> {
+			i.auth("oauth2",
+				t.cache("#Ref1"));
+		});
+	}`) +
+      '\n'
+    );
+  }
+
   getJavaFile(): string {
     return this.resources.load(this.resources.main());
   }
@@ -81,6 +133,12 @@ export class Asserts {
   async validateAddAuthFolder(): Promise<void> {
     const actual = this.getJavaFile();
     const expected = this.addAuthFolderCode() + '}';
+    assert.strictEqual(actual, expected);
+  }
+
+  async validateAddLoginCache(): Promise<void> {
+    const actual = this.getJavaFile();
+    const expected = this.addLoginCacheCode(true) + '}';
     assert.strictEqual(actual, expected);
   }
 
@@ -93,6 +151,18 @@ export class Asserts {
   async validateAddAuthUser(): Promise<void> {
     const actual = this.getJavaFile();
     const expected = this.addAuthUserCode() + '}';
+    assert.strictEqual(actual, expected);
+  }
+
+  async validateAddRefreshToken(): Promise<void> {
+    const actual = this.getJavaFile();
+    const expected = this.addRefreshTokenCode() + '}';
+    assert.strictEqual(actual, expected);
+  }
+
+  async validateSetRefreshCall(): Promise<void> {
+    const actual = this.getJavaFile();
+    const expected = this.setRefreshCallCode() + '}';
     assert.strictEqual(actual, expected);
   }
 }

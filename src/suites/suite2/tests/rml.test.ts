@@ -24,8 +24,6 @@ export class RmlTest extends Rml {
     await this.cacheAccessToken();
     await this.nodeAction('loginUser', 'Run Test');
     await this.runTestDialog();
-    await this.nodeAction('loginUser', 'Actions');
-    await this.loginDepedency();
   }
 
   async addAuthUser(): Promise<void> {
@@ -40,12 +38,14 @@ export class RmlTest extends Rml {
 
   async addRefreshToken(): Promise<void> {
     await this.addNode('auth', 'POST', 'Refresh token');
-    await this.nodeAction('refresh', 'Run Test');
+    await this.nodeAction('refreshToken', 'Run Test');
     await this.runTestDialog();
-    //await this.userDepedency('refresh', 'setAuthToken');
-    await this.nodeAction('refresh', 'Actions');
-    await this.refreshAddBody();
-    await this.nodeAction('refresh', 'Run Test');
+  }
+
+  async setRefreshCall(): Promise<void> {
+    await this.nodeAction('refreshToken', 'Actions');
+    await this.updateActions('refreshCall');
+    await this.nodeAction('refreshCall', 'Run Test');
     await this.runTestDialog();
   }
 
@@ -60,6 +60,7 @@ export class RmlTest extends Rml {
 
   async loginDepedency(): Promise<void> {
     const schema = await this.getSchema();
+    await this.nodeAction('loginUser', 'Actions');
     await this.restage.select(schema.getByLabel('Type', { exact: true }), 'body');
     await this.restage.click(schema.getByRole('button', { name: 'Open Variable Name or Name /' }));
     await this.restage.click(schema.getByRole('menuitem', { name: 'Request Key Select a key from' }));
@@ -72,6 +73,7 @@ export class RmlTest extends Rml {
     await this.restage.fill(schema.getByRole('textbox', { name: 'Request method name' }), 'setUserName');
     await this.restage.fill(schema.getByRole('textbox', { name: 'Ref ID' }), 'username');
     await this.apply();
+    await this.restage.sleep();
   }
 
   async updateActions(method: string): Promise<void> {
@@ -79,28 +81,11 @@ export class RmlTest extends Rml {
     await this.restage.select(schema.getByLabel('Type', { exact: true }), 'auth');
     await this.restage.click(schema.getByRole('button', { name: 'Select Cache, Response,' }));
     await this.restage.click(schema.getByRole('menuitem', { name: 'Cache Value Read directly' }));
-    await this.restage.click(schema.getByRole('button', { name: 'Apply' }));
+    await this.apply();
     await this.restage.click(schema.getByRole('button', { name: 'Add' }));
     await this.restage.click(schema.getByRole('button', { name: 'Done' }));
     await this.restage.check(schema.getByRole('radio', { name: 'Apply directly to this test' }));
     await this.restage.fill(schema.getByRole('textbox', { name: 'Call method name' }), method);
-    await this.apply();
-  }
-
-  async refreshAddBody(): Promise<void> {
-    const schema = await this.getSchema();
-    await this.restage.select(schema.getByLabel('Type', { exact: true }), 'body');
-    await this.restage.click(schema.getByRole('button', { name: 'Open Variable Name or Name /' }));
-    await this.restage.click(schema.getByRole('menuitem', { name: 'Request Key Select a key from' }));
-    await this.restage.click(schema.getByRole('button', { name: /refreshToken.*/ }));
-    await this.restage.click(schema.getByRole('button', { name: 'Select Cache, Response,' }));
-    await this.restage.click(schema.getByRole('menuitem', { name: 'Cache Value Read directly' }));
-    await this.restage.click(schema.getByRole('button', { name: 'Select a path from the' }));
-    await this.restage.click(schema.getByRole('button', { name: /refreshToken.*/ }));
-    await this.apply();
-    await this.restage.click(schema.getByRole('button', { name: 'Add' }));
-    await this.restage.click(schema.getByRole('button', { name: 'Done' }));
-    await this.restage.check(schema.getByRole('radio', { name: 'Apply directly to this test' }));
     await this.apply();
   }
 }

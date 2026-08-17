@@ -363,7 +363,8 @@ export async function prepareTestContext(restage: ReStage, suite: string): Promi
   await restage.click(activityItem);
 
   const actions = restage.page.getByRole('button', { name: 'Actions Section' });
-  const projectExists = await restage.waitExists(actions, 1_000);
+  const timeout = suite == TestSuites.SUITE_1 ? 1_000 : 5_000;
+  const projectExists = await restage.waitExists(actions, timeout);
   if (projectExists) return;
 
   await restage.waitFrame('Project Wizard');
