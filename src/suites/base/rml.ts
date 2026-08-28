@@ -1,7 +1,12 @@
 import { FrameLocator, ReStage } from '../../restage.js';
+import { RmlAsserts } from './rml_asserts.js';
 
 export class Rml {
-  constructor(protected readonly restage: ReStage) {}
+  protected readonly asserts: RmlAsserts;
+
+  constructor(protected readonly restage: ReStage) {
+    this.asserts = new RmlAsserts(restage);
+  }
 
   protected async getSchema(): Promise<FrameLocator> {
     await this.restage.toogleApiSchema();
@@ -10,12 +15,12 @@ export class Rml {
 
   async collapseFolders(): Promise<void> {
     const schema = await this.getSchema();
-    await this.restage.click(schema.getByRole('button', { name: 'Collapse folders' }));
+    await this.restage.click(schema.locator('#rmlCollapseFolders')); // "Collapse folders"
   }
 
   async expandFolders(): Promise<void> {
     const schema = await this.getSchema();
-    await this.restage.click(schema.getByRole('button', { name: 'Expand folders' }));
+    await this.restage.click(schema.locator('#rmlCollapseFolders')); // "Expand folders" (same toggle)
   }
 
   async openRmlTab(): Promise<void> {
@@ -66,41 +71,75 @@ export class Rml {
       await this.restage.inspect();
     }
     await this.restage.waitVisible(node);
-    const menu = node.getByRole('button', {
-      name: 'Node actions',
-    });
+    const menu = node.locator('[id^="rmlNode-"][id$="-menu"]'); // "Node actions"
     await this.restage.click(menu);
 
-    const item = node.getByRole('menuitem', {
-      name: action,
-      exact: true,
-    });
+    const actionIdSuffix: Record<string, string> = {
+      Remove: 'remove',
+      'Run Test': 'run-test',
+      Cache: 'cache',
+      Actions: 'request',
+      Assertions: 'asserts',
+      Properties: 'properties',
+    };
+    const suffix = actionIdSuffix[action];
+    if (!suffix) throw new Error(`Unsupported node action: ${action}`);
+    const item = node.locator(`[id^="rmlNodeAction-"][id$="-${suffix}"]`); // Current label is `action`.
     await this.restage.waitVisible(item);
     await this.restage.click(item);
   }
 
-  async runTestDialog(): Promise<void> {
+  /** Returns the first result's response body log, not the displayed headers. */
+  async runTestDialog(): Promise<string> {
     const schema = await this.getSchema();
-    const methodChevron = schema.locator('details:nth-child(1) > summary > .rml-run-chevron');
-    const requestChevron = schema.locator('details:nth-child(2) > summary > .rml-run-chevron');
-    const responseChevron = schema.locator('details:nth-child(3) > summary > .rml-run-chevron');
-    const unresolved = schema.getByRole('checkbox', { name: 'Unresolved' });
-
+    await this.restage.defaultTestMenu();
+    const dialog = schema.locator('#rmlRunResultDialog'); // "Test Result"
+    await dialog.waitFor({ state: 'visible', timeout: 120_000 });
+    const result = dialog.locator('.rml-run-test-item').first();
+    await result.waitFor({ state: 'visible', timeout: 10_000 });
+    if ((await result.getAttribute('open')) === null) {
+      await this.restage.click(result.locator(':scope > summary'));
+    }
+    const requestSection = result.locator('.rml-run-request-evidence').locator('..');
+    const responseSection = result.locator('.rml-run-response-evidence').locator('..');
+    if ((await requestSection.getAttribute('open')) === null) {
+      await this.restage.click(requestSection.locator(':scope > summary > .rml-run-chevron'));
+    }
+    const unresolved = result.locator('.rml-run-request-unresolved'); // "Show unresolved request" / "Unresolved"
     if (await unresolved.isEnabled()) {
       await this.restage.check(unresolved);
     }
-    await this.restage.click(responseChevron);
-
-    await this.restage.check(schema.getByTitle('Show response headers').getByLabel('Headers'));
-    await this.restage.check(schema.getByTitle('Show request headers').getByLabel('Headers'));
-    await this.restage.click(requestChevron);
-    await this.restage.click(methodChevron);
-    await this.restage.click(schema.getByRole('button', { name: 'Minimize dialog' }));
-    await this.restage.click(schema.getByRole('button', { name: 'Close test result' }));
+    if ((await responseSection.getAttribute('open')) === null) {
+      await this.restage.click(responseSection.locator(':scope > summary > .rml-run-chevron'));
+    }
+    const responseUnresolved = result.locator('.rml-run-response-unresolved'); // "Show unresolved response" / "Unresolved"
+    if (await responseUnresolved.isEnabled()) {
+      await this.restage.check(responseUnresolved);
+    }
+    // Read stored evidence: switching Headers on replaces the visible <pre> content.
+    const responseLog = await result.locator('.rml-run-response-evidence').getAttribute('data-body');
+    if (responseLog === null) throw new Error('The test result has no response log attribute.');
+    await this.restage.check(result.locator('.rml-run-response-headers')); // "Show response headers" / "Headers"
+    await this.restage.check(result.locator('.rml-run-request-headers')); // "Show request headers" / "Headers"
+    await this.restage.click(requestSection.locator(':scope > summary > .rml-run-chevron'));
+    await this.restage.click(result.locator(':scope > summary > .rml-run-chevron'));
+    await this.restage.click(schema.locator('#rmlRunResultMinimize')); // "Minimize dialog"
+    await this.restage.click(schema.locator('#rmlRunResultCloseIcon')); // "Close test result"
+    return responseLog;
   }
 
   async apply(): Promise<void> {
     const schema = await this.getSchema();
-    await this.restage.click(schema.getByRole('button', { name: 'Apply' }));
+    await this.restage.click(schema.getByRole('button', { name: 'Apply' })); // "Apply"
+  }
+
+  async add(): Promise<void> {
+    const schema = await this.getSchema();
+    await this.restage.click(schema.getByRole('button', { name: 'Add' })); // "Add"
+  }
+
+  async done(): Promise<void> {
+    const schema = await this.getSchema();
+    await this.restage.click(schema.getByRole('button', { name: 'Done' })); // "Done"
   }
 }

@@ -1,3 +1,4 @@
+import { Resources } from '../../resources.js';
 import { FrameLocator, Page, ReStage } from '../../restage.js';
 
 export class Wizard {
@@ -13,27 +14,27 @@ export class Wizard {
 
   async setProject(value: string): Promise<void> {
     const wizard = await this.getWizard();
-    await this.restage.fill(wizard.getByRole('textbox', { name: 'Project folder' }), value);
+    await this.restage.fill(wizard.locator('#projectFolder'), value); // "Project folder"
   }
 
   async setGroupId(value: string): Promise<void> {
     const wizard = await this.getWizard();
-    await this.restage.fill(wizard.getByRole('textbox', { name: 'groupId' }), value);
+    await this.restage.fill(wizard.locator('#groupId'), value); // "groupId"
   }
 
   async setArtifactId(value: string): Promise<void> {
     const wizard = await this.getWizard();
-    await this.restage.fill(wizard.getByRole('textbox', { name: 'artifactId' }), value);
+    await this.restage.fill(wizard.locator('#artifactId'), value); // "artifactId"
   }
 
   async setClassName(value: string): Promise<void> {
     const wizard = await this.getWizard();
-    await this.restage.fill(wizard.getByRole('textbox', { name: 'Class name' }), value);
+    await this.restage.fill(wizard.locator('#className'), value); // "Class name"
   }
 
   async setFramework(value: string): Promise<void> {
     const wizard = await this.getWizard();
-    await this.restage.select(wizard.getByLabel('Test framework'), value);
+    await this.restage.select(wizard.locator('#framework'), value); // "Test framework"
   }
 
   async extensions(): Promise<void> {
@@ -67,13 +68,13 @@ export class Wizard {
     const wizard = await this.getWizard();
     await this.restage.click(wizard.getByTestId('project-wizard-generate-project'));
     await this.restage.waitVisible(this.page.getByRole('button', { name: 'Project Explorer Section' }), 60_000);
-    await this.restage.waitVisible(this.page.getByLabel('RestageDemo.java', { exact: true }).getByText('RestageDemo.java'));
+    await this.restage.waitVisible(this.page.getByLabel(Resources.DEFAULT_FILE, { exact: true }).getByText(Resources.DEFAULT_FILE));
   }
 
   async openProject(): Promise<void> {
     const wizard = await this.getWizard();
     await this.restage.click(wizard.getByTestId('project-wizard-open-project'));
     await this.restage.waitVisible(this.page.getByRole('button', { name: 'Project Explorer Section' }));
-    await this.restage.waitVisible(this.page.getByLabel('RestageDemo.java', { exact: true }).getByText('RestageDemo.java'));
+    await this.restage.waitVisible(this.page.getByLabel(Resources.DEFAULT_FILE, { exact: true }).getByText(Resources.DEFAULT_FILE));
   }
 }

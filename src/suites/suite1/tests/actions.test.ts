@@ -1,3 +1,4 @@
+import { Resources } from '../../../resources.js';
 import { ReStage } from '../../../restage.js';
 import { Actions } from '../../base/actions.js';
 
@@ -8,6 +9,6 @@ export class ActionsTest extends Actions {
 
   async init(): Promise<void> {
     await this.open();
-    await this.restage.waitVisible(this.page.getByRole('tab', { name: 'RestageDemo.java' }));
+    await this.restage.waitVisible(this.page.getByRole('tab', { name: Resources.DEFAULT_FILE }));
   }
 }

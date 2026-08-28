@@ -5,6 +5,8 @@ import { ReStage } from './restage.js';
 export class Resources {
   readonly root: string;
 
+  public static DEFAULT_FILE = 'RestageDemo.java';
+
   constructor(private readonly restage: ReStage) {
     this.root = path.join(process.cwd());
   }
@@ -22,7 +24,7 @@ export class Resources {
   }
 
   main(): string {
-    return this.target('src/test/java/io/restage', 'RestageDemo.java');
+    return this.target('src/test/java/io/restage', Resources.DEFAULT_FILE);
   }
 
   loadPath(paths: string): string {
@@ -30,7 +32,9 @@ export class Resources {
   }
 
   writePath(paths: string, data: string | NodeJS.ArrayBufferView): void {
-    fs.writeFileSync(paths, data);
+    if (fs.existsSync(paths)) {
+      fs.writeFileSync(paths, data);
+    }
   }
 
   check(paths: string): string {
@@ -49,22 +53,22 @@ export class Resources {
     return value.replace(/\r\n/g, '\n').trim();
   }
 
-  tempate(addImport: string = '', wrap: boolean = true): string {
+  tempate(opt?: { addImport?: string; classVars?: string; wrap?: boolean }): string {
     return (
       this.normalize(
         `
 package io.restage;
 
 import io.jpostman.annotations.JPostman;
-${addImport}
+${opt?.addImport || ''}
 @JPostman.TestNG
 public class RestageDemo {
-
+${opt?.classVars || ''}
     @JPostman.Context
     JPostman.Runtime<JPostman.Test> runtime;
 
 ` +
-          (wrap === false
+          (opt?.wrap === false
             ? `    @JPostman.ReportContext(details = true)`
             : `    @JPostman.ReportContext(
     	details = true

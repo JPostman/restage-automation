@@ -7,6 +7,7 @@ import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { chromium } from 'playwright-core';
 import { ReStage } from '../restage.js';
 import { Wizard } from './base/wizard.js';
+import { Resources } from '../resources.js';
 
 const TIMEOUT_MS = 90_000;
 const PROJECT_ROOT = process.cwd();
@@ -329,8 +330,14 @@ export const test = base.extend<{}, WorkerFixtures>({
         // Disable notidications
         if (!(await restage.visible(notification))) {
           await restage.click(page.getByRole('button', { name: 'Notifications' }));
-          await restage.click(page.getByRole('button', { name: 'Configure Do Not Disturb...' }));
-          await restage.click(page.getByRole('menuitem', { name: 'Enable Do Not Disturb Mode' }));
+          const doNotDisturb = page.getByRole('button', { name: 'Configure Do Not Disturb...' });
+          if (await restage.exists(doNotDisturb)) {
+            await restage.click(doNotDisturb);
+          }
+          const enableDoNotDisturb = page.getByRole('menuitem', { name: 'Enable Do Not Disturb Mode' });
+          if (await restage.exists(enableDoNotDisturb)) {
+            await restage.click(enableDoNotDisturb);
+          }
         }
 
         await use(restage);
@@ -365,7 +372,28 @@ export async function prepareTestContext(restage: ReStage, suite: string): Promi
   const actions = restage.page.getByRole('button', { name: 'Actions Section' });
   const timeout = suite == TestSuites.SUITE_1 ? 1_000 : 5_000;
   const projectExists = await restage.waitExists(actions, timeout);
-  if (projectExists) return;
+  if (projectExists) {
+    const resources = new Resources(restage);
+    const file = restage.page.getByRole('tab', { name: Resources.DEFAULT_FILE });
+    if (await restage.exists(file)) {
+      await restage.click(file.getByLabel('Close (Ctrl+F4)')); // Close current java file
+    }
+    resources.writePath(resources.main(), resources.tempate() + '}'); // Rewrite
+    await restage.toogleApiSchema();
+
+    const input = restage.page.locator('.quick-input-widget input');
+    await restage.page.keyboard.press('Control+p'); // "Quick Open"
+    await input.waitFor({ state: 'visible' });
+    await input.fill(resources.main()); // File path
+    await input.press('Enter'); // Open file
+    await restage.waitExists(file);
+
+    const closeButton = restage.page.getByRole('button', { name: 'Hide Panel (Ctrl+J)' });
+    if (await restage.exists(closeButton)) {
+      await restage.click(closeButton);
+    }
+    return;
+  }
 
   await restage.waitFrame('Project Wizard');
 

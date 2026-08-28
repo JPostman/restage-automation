@@ -11,7 +11,7 @@ export class Asserts {
 
   addAuthFolderCode(): string {
     return (
-      this.resources.tempate('import org.testng.annotations.Test;\n') +
+      this.resources.tempate({ addImport: 'import org.testng.annotations.Test;\n' }) +
       '\n\t' +
       this.resources.normalize(`@JPostman.Runner(
 		folder = "Auth"
@@ -41,13 +41,30 @@ export class Asserts {
     );
   }
 
-  addLoginUserCode(): string {
+  createSetToken(): string {
+    return (
+      this.addLoginCacheCode() +
+      '\n\n\t' +
+      this.resources.normalize(`
+	@JPostman.Request(
+		id = "token",
+		dependsOn = "#Ref1"
+	)
+	public void setAuthToken(
+		JPostman.Test test,
+		JPostman.Info info) {
+	}`) +
+      '\n'
+    );
+  }
+
+  updateSetToken(): string {
     return (
       this.addLoginCacheCode() +
       '\n\t' +
       this.resources.normalize(`
 	@JPostman.Request(
-		id = "Ref2",
+		id = "token",
 		dependsOn = "#Ref1"
 	)
 	public void setAuthToken(
@@ -62,13 +79,13 @@ export class Asserts {
 
   addAuthUserCode(): string {
     return (
-      this.addLoginUserCode() +
+      this.updateSetToken() +
       '\n\t' +
       this.resources.normalize(`
 	@JPostman.Response(
 		folder = "Auth",
 		request = "Get Auth User",
-		dependsOn = "#Ref2"
+		dependsOn = "#token"
 	)
 	@Test
 	public void me() {
@@ -85,7 +102,7 @@ export class Asserts {
   @JPostman.Call(
 		folder = "Auth",
 		request = "Refresh token",
-		dependsOn = {"#Ref2", "#Ref1"}
+		dependsOn = {"#token", "#Ref1"}
 	)
 	@Test
 	public void refresh() {
@@ -120,14 +137,20 @@ export class Asserts {
     assert.strictEqual(actual, expected);
   }
 
-  async validateAddLoginUser(): Promise<void> {
-    const expected = this.addLoginUserCode() + '}';
+  async validateCreateSetToken(): Promise<void> {
+    const expected = this.createSetToken() + '}';
     let actual = this.getJavaFile();
     let count = 0;
     while (count++ < 5 && actual != expected) {
       actual = this.getJavaFile();
       await this.restage.sleep();
     }
+    assert.strictEqual(actual, expected);
+  }
+
+  async validateSetToken(): Promise<void> {
+    const actual = this.getJavaFile();
+    const expected = this.updateSetToken() + '}';
     assert.strictEqual(actual, expected);
   }
 

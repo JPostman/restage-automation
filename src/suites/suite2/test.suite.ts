@@ -29,23 +29,34 @@ test.describe('Suite 2', () => {
     await inspectTestClassOnComplete(restage, testInfo);
   });
 
-  test('Prepare Resources', async () => {
-    _resources.writePath(_resources.main(), _resources.tempate() + '}');
-  });
-
   test('Test RML', async () => {
     await _actionsTest.init();
     await _rmlTest.init();
     await _asserts.validateAddAuthFolder();
     await _rmlTest.addLoginUser();
     await _asserts.validateAddLoginCache();
-    await _rmlTest.loginDepedency();
-    await _asserts.validateAddLoginUser();
     await _rmlTest.addAuthUser();
     await _asserts.validateAddAuthUser();
+    await _rmlTest.createRequestToken();
+    await _asserts.validateAddLoginUser();
+    await _rmlTest.addUserDependencies();
+    await _asserts.validateUserDependencies();
     await _rmlTest.addRefreshToken();
     await _asserts.validateAddRefreshToken();
-    await _rmlTest.setRefreshCall();
-    await _asserts.validateSetRefreshCall();
+    await _rmlTest.addRefreshDependencies();
+    await _asserts.validateRefreshDependencies();
+    await _rmlTest.addRefreshBody();
+    await _asserts.validateAddRefreshBody();
+    await _rmlTest.preview();
+  });
+
+  test('Test AI Engine', async () => {
+    await _actionsTest.toggleAIMesssageBot();
+    await _actionsTest.runTestWithAIEngine();
+  });
+
+  test('Test Maven Build', async () => {
+    await _actionsTest.runMavenTest();
+    await _actionsTest.mavenBuildSuccess();
   });
 });

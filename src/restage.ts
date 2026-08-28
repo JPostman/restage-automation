@@ -3,6 +3,7 @@ import type { Frame, FrameLocator, Locator, Page } from 'playwright-core';
 export type { Frame, FrameLocator, Locator, Page } from 'playwright-core';
 
 const DEFAULT_TIMEOUT_MS = 20_000;
+const ACTION_TIMEOUT_MS = 10_000;
 
 function show(locator: Locator): string {
   return locator.toString();
@@ -55,18 +56,23 @@ export class ReStage {
   }
 
   async click(locator: Locator, button: 'left' | 'right' | 'middle' = 'left'): Promise<void> {
-    log(`click ${show(locator)} - ${button}`);
-    await locator.click({ button });
+    log(`click ${show(locator)} - ${button} timeout=${ACTION_TIMEOUT_MS}ms`);
+    await locator.click({ button, timeout: ACTION_TIMEOUT_MS });
   }
 
   async check(locator: Locator): Promise<void> {
-    log(`check ${show(locator)}`);
-    await locator.check();
+    log(`check ${show(locator)} timeout=${ACTION_TIMEOUT_MS}ms`);
+    await locator.check({ timeout: ACTION_TIMEOUT_MS });
+  }
+
+  async uncheck(locator: Locator): Promise<void> {
+    log(`uncheck ${show(locator)} timeout=${ACTION_TIMEOUT_MS}ms`);
+    await locator.uncheck({ timeout: ACTION_TIMEOUT_MS });
   }
 
   async fill(locator: Locator, value: string, valueOut: boolean = true): Promise<void> {
     log(`fill ${show(locator)}` + (valueOut ? ` = ${JSON.stringify(value)}` : ''));
-    await locator.fill(value);
+    await locator.fill(value, { timeout: ACTION_TIMEOUT_MS });
   }
 
   async drag(source: Locator, target: Locator): Promise<void> {
@@ -76,7 +82,7 @@ export class ReStage {
 
   async select(locator: Locator, value: string): Promise<void> {
     log(`select ${show(locator)} = ${JSON.stringify(value)}`);
-    await locator.selectOption(value);
+    await locator.selectOption(value, { timeout: ACTION_TIMEOUT_MS });
   }
 
   async scroll(locator: Locator): Promise<void> {
@@ -102,15 +108,52 @@ export class ReStage {
   }
 
   async waitFor<T>(value: () => Promise<T>, condition: (value: T) => boolean | Promise<boolean>, timeout = DEFAULT_TIMEOUT_MS, interval = 250): Promise<T> {
-    const deadline = Date.now() + timeout;
+    const startedAt = Date.now();
+    const deadline = startedAt + timeout;
+    let lastError: unknown;
+
     while (Date.now() < deadline) {
-      const result = await value();
-      if (await condition(result)) {
-        return result;
+      try {
+        const result = await this.withTimeout(value(), Math.max(1, deadline - Date.now()), `waitFor operation exceeded ${timeout}ms`);
+
+        const matches = await this.withTimeout(Promise.resolve(condition(result)), Math.max(1, deadline - Date.now()), `waitFor condition exceeded ${timeout}ms`);
+
+        if (matches) {
+          return result;
+        }
+      } catch (error) {
+        lastError = error;
       }
-      await this.page.waitForTimeout(interval);
+
+      const delay = Math.min(interval, deadline - Date.now());
+      if (delay > 0) {
+        await this.page.waitForTimeout(delay);
+      }
     }
-    throw new Error(`waitFor timeout after ${timeout}ms`);
+
+    const elapsed = Date.now() - startedAt;
+    const details = lastError instanceof Error ? ` Last error: ${lastError.message}` : '';
+    throw new Error(`waitFor timeout after ${elapsed}ms (configured ${timeout}ms).${details}`);
+  }
+
+  private async withTimeout<T>(operation: Promise<T>, timeout: number, message: string): Promise<T> {
+    if (timeout <= 0) {
+      throw new Error(message);
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        operation,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(message)), timeout);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
   }
 
   /**
@@ -121,27 +164,30 @@ export class ReStage {
    * iframe with the same title while the webview is being replaced.
    */
   async findFrame(title?: string | null, selector?: string): Promise<Frame | undefined> {
-    for (const frame of this.page.frames()) {
-      if (frame === this.page.mainFrame() || frame.isDetached()) {
-        continue;
-      }
+    for (const page of this.page.context().pages()) {
+      if (page.isClosed()) continue;
+      for (const frame of page.frames()) {
+        if (frame === page.mainFrame() || frame.isDetached()) continue;
 
-      try {
-        if (title) {
-          const actualTitle = await this.frameTitle(frame);
-          if (actualTitle !== title) continue;
+        try {
+          const iframe = await frame.frameElement();
+          try {
+            if (title && (await iframe.getAttribute('title')) !== title) {
+              continue;
+            }
+            if (!(await iframe.isVisible())) continue;
+          } finally {
+            await iframe.dispose();
+          }
+          if (selector && !(await frame.locator(selector).first().isVisible())) {
+            continue;
+          }
+          return frame;
+        } catch {
+          // The page or frame may be replaced during discovery.
         }
-
-        if (selector && (await frame.locator(selector).count()) === 0) {
-          continue;
-        }
-
-        return frame;
-      } catch {
-        // VS Code may replace the webview while we inspect it.
       }
     }
-
     return undefined;
   }
 
@@ -154,7 +200,8 @@ export class ReStage {
    * frame and can select a stale duplicate.
    */
   async waitFrameLocator(title: string, selector = 'body', timeout = DEFAULT_TIMEOUT_MS): Promise<FrameLocator> {
-    log(`wait frame ${JSON.stringify(title)} selector=${JSON.stringify(selector)} timeout=${timeout}ms`);
+    const escapedTitle = title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    log(`wait frame iframe[title="${escapedTitle}"] selector=${JSON.stringify(selector)} timeout=${timeout}ms`);
 
     const located = await this.waitFor<FrameLocator | undefined>(
       async () => {
@@ -169,7 +216,6 @@ export class ReStage {
           const parent = frame.parentFrame();
           if (!parent) return undefined;
 
-          const escapedTitle = title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
           const iframes = parent.locator(`iframe[title="${escapedTitle}"]:visible`);
 
           for (let index = 0, count = await iframes.count(); index < count; index += 1) {
@@ -246,5 +292,13 @@ export class ReStage {
       },
       (exists) => exists,
     );
+  }
+
+  async defaultTestMenu(): Promise<void> {
+    const defaultTest = this.page.getByText('Defaultmvn clean test');
+    await this.sleep();
+    if (await this.exists(defaultTest)) {
+      await this.click(defaultTest);
+    }
   }
 }

@@ -11,7 +11,10 @@ export class Asserts {
 
   addAuthFolderCode(): string {
     return (
-      this.resources.tempate('import org.testng.annotations.Test;\n') +
+      this.resources.tempate({
+        addImport: 'import org.testng.annotations.Test;\n',
+        classVars: '\n\tprivate final String GET_AUTH = "#getAuth";' + '\n\tprivate final String SET_AUTH = "#setAuth";' + '\n\tprivate final String CACHE_TOKEN = "token";\n\n',
+      }) +
       '\n\t' +
       this.resources.normalize(`@JPostman.Runner(
 		folder = "Auth"
@@ -23,46 +26,20 @@ export class Asserts {
     );
   }
 
-  addLoginCacheCode(original: boolean): string {
+  addLoginCacheCode(): string {
     return (
       this.addAuthFolderCode() +
       '\n\t' +
-      this.resources.normalize(
-        `
-	@JPostman.Response(
-		id = "Ref1",
-		` +
-          (original
-            ? `folder = "Auth",
-		request = "Login user",
-		cache = "token"`
-            : `cache = "token",
-		dependsOn = "#username"`) +
-          `
-	)
-	public String loginUser() {
-		return runtime.test().path("accessToken");
-	}`,
-      ) +
-      '\n'
-    );
-  }
-
-  addLoginUserCode(): string {
-    return (
-      this.addLoginCacheCode(false) +
-      '\n\t' +
-      this.resources.normalize(`
-	@JPostman.Request(
-		id = "username",
+      this.resources.normalize(`@JPostman.Response(
+		id = GET_AUTH,
 		folder = "Auth",
-		request = "Login user"
+		request = "Login user",
+		cache = CACHE_TOKEN
 	)
-	public void setUserName(
+	public String loginUserAuthToken(
 		JPostman.Test test,
 		JPostman.Info info) {
-		info.body("username",
-			test.get("username"));
+		return test.path("accessToken");
 	}`) +
       '\n'
     );
@@ -70,20 +47,69 @@ export class Asserts {
 
   addAuthUserCode(): string {
     return (
-      this.addLoginUserCode() +
+      this.addLoginCacheCode() +
       '\n\t' +
       this.resources.normalize(`
-	@JPostman.Call(
+	@JPostman.Response(
 		folder = "Auth",
-		request = "Get Auth User",
-		dependsOn = "#Ref1"
+		request = "Get Auth User"
 	)
 	@Test
-	public void authUserCall() {
-		runtime.call((t /*test*/, i /*info*/) -> {
-			i.auth("oauth2",
-				t.cache("#Ref1"));
-		});
+	public void getAuthUser() {
+	}`) +
+      '\n'
+    );
+  }
+
+  addGetAuthUser(): string {
+    return (
+      this.addLoginCacheCode() +
+      '\n\t' +
+      this.resources.normalize(`
+	@JPostman.Response(
+		dependsOn = SET_AUTH
+	)
+	@Test
+	public void getAuthUser() {
+	}`) +
+      '\n\n'
+    );
+  }
+
+  addLoginUserCode(): string {
+    return (
+      this.addGetAuthUser() +
+      '\n\t' +
+      this.resources.normalize(`
+	@JPostman.Request(
+		id = SET_AUTH,
+		folder = "Auth",
+		request = "Get Auth User"
+	)
+	public void authRequest(
+		JPostman.Test test,
+		JPostman.Info info) {
+	}`) +
+      '\n'
+    );
+  }
+
+  addAuthRequest(): string {
+    return (
+      this.addGetAuthUser() +
+      '\t' +
+      this.resources.normalize(`
+	@JPostman.Request(
+		id = SET_AUTH,
+		folder = "Auth",
+		request = "Get Auth User",
+		dependsOn = GET_AUTH
+	)
+	public void authRequest(
+		JPostman.Test test,
+		JPostman.Info info) {
+		info.auth("oauth2",
+			test.cache(CACHE_TOKEN));
 	}`) +
       '\n'
     );
@@ -91,7 +117,7 @@ export class Asserts {
 
   addRefreshTokenCode(): string {
     return (
-      this.addAuthUserCode() +
+      this.addAuthRequest() +
       '\n\t' +
       this.resources.normalize(`
   @JPostman.Response(
@@ -105,21 +131,44 @@ export class Asserts {
     );
   }
 
-  setRefreshCallCode(): string {
+  addRefreshTokenAuth(): string {
     return (
-      this.addAuthUserCode() +
+      this.addAuthRequest() +
       '\n\t' +
       this.resources.normalize(`
   @JPostman.Call(
 		folder = "Auth",
 		request = "Refresh token",
-		dependsOn = "#Ref1"
+		dependsOn = GET_AUTH
 	)
 	@Test
-	public void refreshCall() {
+	public void refreshToken() {
 		runtime.call((t /*test*/, i /*info*/) -> {
 			i.auth("oauth2",
-				t.cache("#Ref1"));
+				t.cache(CACHE_TOKEN));
+		});
+	}`) +
+      '\n'
+    );
+  }
+
+  addRefreshBody(): string {
+    return (
+      this.addAuthRequest() +
+      '\n\t' +
+      this.resources.normalize(`
+  @JPostman.Call(
+		folder = "Auth",
+		request = "Refresh token",
+		dependsOn = GET_AUTH
+	)
+	@Test
+	public void refreshToken() {
+		runtime.call((t /*test*/, i /*info*/) -> {
+			i.auth("oauth2",
+				t.cache(CACHE_TOKEN));
+			i.body("refreshToken",
+				t.get(GET_AUTH + "/refreshToken"));
 		});
 	}`) +
       '\n'
@@ -138,7 +187,7 @@ export class Asserts {
 
   async validateAddLoginCache(): Promise<void> {
     const actual = this.getJavaFile();
-    const expected = this.addLoginCacheCode(true) + '}';
+    const expected = this.addLoginCacheCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
@@ -154,15 +203,27 @@ export class Asserts {
     assert.strictEqual(actual, expected);
   }
 
+  async validateUserDependencies(): Promise<void> {
+    const actual = this.getJavaFile();
+    const expected = this.addAuthRequest() + '}';
+    assert.strictEqual(actual, expected);
+  }
+
   async validateAddRefreshToken(): Promise<void> {
     const actual = this.getJavaFile();
     const expected = this.addRefreshTokenCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
-  async validateSetRefreshCall(): Promise<void> {
+  async validateRefreshDependencies(): Promise<void> {
     const actual = this.getJavaFile();
-    const expected = this.setRefreshCallCode() + '}';
+    const expected = this.addRefreshTokenAuth() + '}';
+    assert.strictEqual(actual, expected);
+  }
+
+  async validateAddRefreshBody(): Promise<void> {
+    const actual = this.getJavaFile();
+    const expected = this.addRefreshBody() + '}';
     assert.strictEqual(actual, expected);
   }
 }

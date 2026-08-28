@@ -41,6 +41,7 @@ export class Actions {
     const menu = this.page.getByRole('button', { name: 'ReSTage action: Run Maven Test' });
     await rm(MAVEN_RESULT_FILE, { force: true }).catch(() => undefined);
     await this.restage.click(menu);
+    await this.restage.defaultTestMenu();
   }
 
   async openStudioTest(): Promise<void> {

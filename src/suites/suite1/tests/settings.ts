@@ -12,6 +12,7 @@ export class SettingsTest extends Settings {
       await this.restage.click(deleteButton);
     }
     await this.open(SettingsTab.RML).wrapLine(true).apply();
+    await this.close();
   }
 }
 
