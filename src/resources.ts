@@ -4,6 +4,7 @@ import { ReStage } from './restage.js';
 
 export class Resources {
   readonly root: string;
+  protected previousContent: string = '';
 
   public static DEFAULT_FILE = 'RestageDemo.java';
 
@@ -51,6 +52,27 @@ export class Resources {
   normalize(value: string, normalize: boolean = true): string {
     if (!normalize) return value;
     return value.replace(/\r\n/g, '\n').trim();
+  }
+
+  async mainReset(): Promise<void> {
+    this.previousContent = this.load(this.main());
+  }
+
+  async mainUpdated(): Promise<string> {
+    return await this.waitFileUpdate(this.main());
+  }
+
+  async waitFileUpdate(paths: string, normalize: boolean = true): Promise<string> {
+    let stableReads = 0;
+    let actual = '';
+    while (stableReads++ < 10) {
+      actual = this.load(paths, normalize);
+      if (actual !== this.previousContent) {
+        return (this.previousContent = actual);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return actual;
   }
 
   tempate(opt?: { addImport?: string; classVars?: string; wrap?: boolean }): string {

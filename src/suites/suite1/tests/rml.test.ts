@@ -63,7 +63,6 @@ export class RmlTest extends Rml {
     await this.restage.click(schema.locator('#rmlRequestCacheApply')); // "Apply"
     await this.restage.click(schema.locator('#rmlRequestAdd')); // "Add"
     await this.restage.click(schema.locator('#rmlRequestCancel')); // "Done"
-    await this.restage.sleep();
   }
 
   async userDepedency(method1: string, method2: string): Promise<void> {

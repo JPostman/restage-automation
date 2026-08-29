@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import type { Browser, BrowserContext, Frame, Page } from 'playwright-core';
 import { ReStage } from './restage.js';
+import { testTarget } from './suites/suite-config.js';
 
 const TIMEOUT_MS = 60_000;
 const ACTION_DELAY_MS = Number(process.env.RESTAGE_ACTION_DELAY_MS ?? '0');
@@ -19,16 +20,6 @@ const VSCODE_SETTINGS = path.join(PROJECT_ROOT, '.vscode', 'settings.json');
 const RUNTIME_STATE = path.join(PROJECT_ROOT, '.restage-automation.json');
 const STOP_FILE = path.join(PROJECT_ROOT, '.restage-test-stop');
 const TEST_RUNNER_PID = Number(process.env.RESTAGE_TEST_RUNNER_PID ?? '');
-
-type TestTarget = 'all' | 'suite1' | 'suite2';
-
-function testTarget(): TestTarget {
-  const value = (process.env.RESTAGE_TEST_TARGET ?? 'all').trim().toLowerCase();
-  if (value !== 'all' && value !== 'suite1' && value !== 'suite2') {
-    throw new Error(`Unsupported RESTAGE_TEST_TARGET: ${value}`);
-  }
-  return value;
-}
 
 function log(message: string): void {
   console.log(`[Main] ${message}`);

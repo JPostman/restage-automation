@@ -1,5 +1,5 @@
 import { test, prepareTestContext, reportTestFailure, inspectTestClassOnComplete } from '../suites.js';
-import { Asserts } from './asserts.js';
+import { Asserts } from './tests/asserts.js';
 import { WizardTest } from './tests/wizard.test.js';
 import { ActionsTest } from './tests/actions.test.js';
 import { SchemaTest } from './tests/schema.test.js';

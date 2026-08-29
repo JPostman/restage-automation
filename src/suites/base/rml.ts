@@ -1,11 +1,14 @@
+import { Resources } from '../../resources.js';
 import { FrameLocator, ReStage } from '../../restage.js';
 import { RmlAsserts } from './rml_asserts.js';
 
 export class Rml {
   protected readonly asserts: RmlAsserts;
+  protected readonly resources: Resources;
 
   constructor(protected readonly restage: ReStage) {
     this.asserts = new RmlAsserts(restage);
+    this.resources = new Resources(restage);
   }
 
   protected async getSchema(): Promise<FrameLocator> {
@@ -128,9 +131,26 @@ export class Rml {
     return responseLog;
   }
 
-  async apply(): Promise<void> {
+  async wrapLine(): Promise<void> {
     const schema = await this.getSchema();
-    await this.restage.click(schema.getByRole('button', { name: 'Apply' })); // "Apply"
+    const menu = schema.locator('#rmlToolbarMenuToggle');
+    const wrapLine = schema.locator('#rmlWrapAnnotations');
+    await this.restage.click(menu); // Current label: "RML options"
+    if (await wrapLine.isChecked()) {
+      await this.restage.click(menu); // Current label: "RML options"
+    } else {
+      await this.restage.click(wrapLine); // Current label: "Wrap Line"
+    }
+  }
+
+  async addClassVaraible(name: string, value: string): Promise<void> {
+    const schema = await this.getSchema();
+    await this.restage.click(schema.getByRole('button', { name: 'RML options' }));
+    await this.restage.click(schema.getByRole('menuitem', { name: 'Class Variables' }));
+    await this.restage.fill(schema.getByRole('textbox', { name: 'Variable Name' }), name);
+    await this.restage.fill(schema.getByRole('textbox', { name: 'Value' }), value);
+    await this.add();
+    await this.done();
   }
 
   async add(): Promise<void> {
@@ -138,8 +158,22 @@ export class Rml {
     await this.restage.click(schema.getByRole('button', { name: 'Add' })); // "Add"
   }
 
+  async update(): Promise<void> {
+    const schema = await this.getSchema();
+    await this.restage.click(schema.getByRole('button', { name: 'Update' })); // "Update"
+  }
+
+  async apply(): Promise<void> {
+    const schema = await this.getSchema();
+    await this.resources.mainReset();
+    await this.restage.click(schema.getByRole('button', { name: 'Apply' })); // "Apply"
+    await this.resources.mainUpdated();
+  }
+
   async done(): Promise<void> {
     const schema = await this.getSchema();
+    await this.resources.mainReset();
     await this.restage.click(schema.getByRole('button', { name: 'Done' })); // "Done"
+    await this.resources.mainUpdated();
   }
 }

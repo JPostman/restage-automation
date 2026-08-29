@@ -1,5 +1,5 @@
-import { ReStage } from '../../restage.js';
-import { Resources } from '../../resources.js';
+import { ReStage } from '../../../restage.js';
+import { Resources } from '../../../resources.js';
 import assert from 'node:assert/strict';
 
 export class Asserts {
@@ -32,7 +32,8 @@ export class Asserts {
 		id = "Ref1",
 		folder = "Auth",
 		request = "Login user",
-		cache = ""
+		cache = "",
+		dependsOn = ""
 	)
 	@Test
 	public void login() {
@@ -115,53 +116,53 @@ export class Asserts {
     );
   }
 
-  getJavaFile(): string {
-    return this.resources.load(this.resources.main());
+  async getJavaFile(): Promise<string> {
+    return this.resources.mainUpdated();
   }
 
   async validateWizardCreated(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = await this.getJavaFile();
     const expected = this.resources.tempate() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddAuthFolder(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = await this.getJavaFile();
     const expected = this.addAuthFolderCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddLoginCache(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = await this.getJavaFile();
     const expected = this.addLoginCacheCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateCreateSetToken(): Promise<void> {
     const expected = this.createSetToken() + '}';
-    let actual = this.getJavaFile();
+    let actual = await this.getJavaFile();
     let count = 0;
     while (count++ < 5 && actual != expected) {
-      actual = this.getJavaFile();
+      actual = await this.getJavaFile();
       await this.restage.sleep();
     }
     assert.strictEqual(actual, expected);
   }
 
   async validateSetToken(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = await this.getJavaFile();
     const expected = this.updateSetToken() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddAuthUser(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = await this.getJavaFile();
     const expected = this.addAuthUserCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddRefreshToken(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = await this.getJavaFile();
     const expected = this.addRefreshTokenCode() + '}';
     assert.strictEqual(actual, expected);
   }

@@ -71,7 +71,8 @@
       "description": "Choose the Playwright test suite.",
       "options": [
         "suite1",
-        "suite2"
+        "suite2",
+        "suite3"
       ],
       "default": "suite1"
     }

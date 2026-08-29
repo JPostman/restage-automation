@@ -4,14 +4,14 @@ import { ReStage } from '../../restage.js';
 import { Asserts } from './tests/asserts.js';
 import { RmlTest } from './tests/rml.test.js';
 
-test.describe('Suite 2', () => {
+test.describe('Suite 3', () => {
   let _restage: ReStage;
   let _asserts: Asserts;
   let _actions: Actions;
   let _rmlTest: RmlTest;
 
   test.beforeAll(async ({ restage }) => {
-    await prepareTestContext(restage, 'suite2');
+    await prepareTestContext(restage, 'suite3');
     _restage = restage;
     _asserts = new Asserts(restage);
     _actions = new Actions(restage);
@@ -31,20 +31,11 @@ test.describe('Suite 2', () => {
     await _rmlTest.init();
     await _asserts.validateAddAuthFolder();
     await _rmlTest.addLoginUser();
-    await _asserts.validateAddLoginCache();
+    await _asserts.validateUpdateLoginUser();
+    await _rmlTest.varsLoginUser();
+    await _asserts.validateVarsLoginUser();
     await _rmlTest.addAuthUser();
     await _asserts.validateAddAuthUser();
-    await _rmlTest.createRequestToken();
-    await _asserts.validateAddLoginUser();
-    await _rmlTest.addUserDependencies();
-    await _asserts.validateUserDependencies();
-    await _rmlTest.addRefreshToken();
-    await _asserts.validateAddRefreshToken();
-    await _rmlTest.addRefreshDependencies();
-    await _asserts.validateRefreshDependencies();
-    await _rmlTest.addRefreshBody();
-    await _asserts.validateAddRefreshBody();
-    await _rmlTest.preview();
   });
 
   test('Test AI Engine', async () => {

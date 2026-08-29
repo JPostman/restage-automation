@@ -8,6 +8,8 @@ import { chromium } from 'playwright-core';
 import { ReStage } from '../restage.js';
 import { Wizard } from './base/wizard.js';
 import { Resources } from '../resources.js';
+import { suiteProjects, testTarget } from './suite-config.js';
+export { testTarget } from './suite-config.js';
 
 const TIMEOUT_MS = 90_000;
 const PROJECT_ROOT = process.cwd();
@@ -37,17 +39,7 @@ function log(message: string): void {
 export class TestSuites {
   static readonly SUITE_1 = 'suite1' as const;
   static readonly SUITE_2 = 'suite2' as const;
-  static readonly SUPPORTED = ['all', TestSuites.SUITE_1, TestSuites.SUITE_2] as const;
-}
-
-export type TestTarget = (typeof TestSuites.SUPPORTED)[number];
-
-export function testTarget(): TestTarget {
-  const value = (process.env.RESTAGE_TEST_TARGET ?? 'all').trim().toLowerCase();
-  if (!TestSuites.SUPPORTED.includes(value as TestTarget)) {
-    throw new Error(`Unsupported RESTAGE_TEST_TARGET: ${value}`);
-  }
-  return value as TestTarget;
+  static readonly SUITE_3 = 'suite3' as const;
 }
 
 type RuntimeState = {
@@ -133,7 +125,7 @@ async function stopSession(): Promise<void> {
   fs.rmSync(STOP_FILE, { force: true });
 }
 
-async function startSession(sessionTarget: TestTarget): Promise<ChildProcess> {
+async function startSession(sessionTarget: string): Promise<ChildProcess> {
   const existingState = readRuntimeState();
   if (existingState) {
     if (isProcessRunning(existingState.ownerPid)) {
@@ -268,6 +260,8 @@ export async function reportTestFailure(restage: ReStage, testInfo: TestInfo): P
     }
   }
 
+  // debugger; // common breakpoint for every failed test
+
   if (!inspectOnFailure()) {
     console.error('[Test] Inspector disabled for this run. Continuing to the next test.');
     return;
@@ -290,13 +284,12 @@ export const test = base.extend<{}, WorkerFixtures>({
   restage: [
     async ({}, use, workerInfo) => {
       const projectName = workerInfo.project.name;
-      const sessionTarget = projectName === TestSuites.SUITE_2 ? TestSuites.SUITE_2 : TestSuites.SUITE_1;
 
       let state = readRuntimeState();
       const canReuse = await runtimeStateUsable(state);
 
       if (!canReuse) {
-        await startSession(sessionTarget);
+        await startSession(projectName);
         state = await waitForRuntimeState();
       } else {
         log(`Reusing the live ReSTage UI/session for worker ${workerInfo.workerIndex} (${projectName}).`);
@@ -331,11 +324,11 @@ export const test = base.extend<{}, WorkerFixtures>({
         if (!(await restage.visible(notification))) {
           await restage.click(page.getByRole('button', { name: 'Notifications' }));
           const doNotDisturb = page.getByRole('button', { name: 'Configure Do Not Disturb...' });
-          if (await restage.exists(doNotDisturb)) {
+          if ((await restage.exists(doNotDisturb)) && (await doNotDisturb.isVisible())) {
             await restage.click(doNotDisturb);
           }
           const enableDoNotDisturb = page.getByRole('menuitem', { name: 'Enable Do Not Disturb Mode' });
-          if (await restage.exists(enableDoNotDisturb)) {
+          if ((await restage.exists(enableDoNotDisturb)) && (await enableDoNotDisturb.isVisible())) {
             await restage.click(enableDoNotDisturb);
           }
         }
@@ -404,24 +397,9 @@ export async function prepareTestContext(restage: ReStage, suite: string): Promi
   }
 }
 
-const target = testTarget();
-const suite1 = {
-  name: TestSuites.SUITE_1,
-  testMatch: '**/suite1/test.suite.js',
-};
-const suite2 = {
-  name: TestSuites.SUITE_2,
-  testMatch: '**/suite2/test.suite.js',
-};
-
-const continueOnFailure = process.env.RESTAGE_CONTINUE_ON_FAILURE === '1';
-
-const projects =
-  target === TestSuites.SUITE_1 ? [suite1] : target === TestSuites.SUITE_2 ? [suite2] : continueOnFailure ? [suite1, suite2] : [suite1, { ...suite2, dependencies: [TestSuites.SUITE_1] }];
-
 export default defineConfig({
   testDir: '.',
-  projects,
+  projects: suiteProjects(),
   workers: 1,
   fullyParallel: false,
   retries: 0,

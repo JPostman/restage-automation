@@ -14,30 +14,6 @@ export class RmlTest extends Rml {
     await this.addClassVaraible('CACHE_TOKEN', 'token');
     await this.addClassVaraible('SET_AUTH', '#setAuth');
     await this.addClassVaraible('GET_AUTH', '#getAuth');
-    await this.restage.sleep();
-  }
-
-  async wrapLine(): Promise<void> {
-    const schema = await this.getSchema();
-    const menu = schema.locator('#rmlToolbarMenuToggle');
-    const wrapLine = schema.locator('#rmlWrapAnnotations');
-    await this.restage.click(menu); // Current label: "RML options"
-    if (await wrapLine.isChecked()) {
-      await this.restage.click(menu); // Current label: "RML options"
-    } else {
-      await this.restage.click(wrapLine); // Current label: "Wrap Line"
-    }
-    await this.restage.sleep();
-  }
-
-  async addClassVaraible(name: string, value: string): Promise<void> {
-    const schema = await this.getSchema();
-    await this.restage.click(schema.getByRole('button', { name: 'RML options' }));
-    await this.restage.click(schema.getByRole('menuitem', { name: 'Class Variables' }));
-    await this.restage.fill(schema.getByRole('textbox', { name: 'Variable Name' }), name);
-    await this.restage.fill(schema.getByRole('textbox', { name: 'Value' }), value);
-    await this.add();
-    await this.done();
   }
 
   async addLoginUser(): Promise<void> {
@@ -84,7 +60,6 @@ export class RmlTest extends Rml {
     await this.restage.click(schema.getByRole('button', { name: 'Select Request ID class' }));
     await this.restage.click(schema.getByRole('menuitem', { name: 'SET_AUTH #setAuth' }));
     await this.apply();
-    await this.restage.sleep();
   }
 
   async addAuthDependency(): Promise<void> {
