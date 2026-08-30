@@ -65,17 +65,6 @@ export class RmlTest extends Rml {
     await this.restage.click(schema.locator('#rmlRequestCancel')); // "Done"
   }
 
-  async userDepedency(method1: string, method2: string): Promise<void> {
-    const schema = await this.getSchema();
-    const node1 = schema.locator(`[data-source-method="${method1}"]`);
-    const node2 = schema.locator(`[data-source-method="${method2}"]`);
-    await this.restage.click(node1);
-    const handle = node1.locator('[id^="rmlNode-"][id$="-dependency"]'); // "Add dependency connection"
-    await this.restage.waitVisible(handle);
-    await this.restage.waitVisible(node2);
-    await this.restage.drag(handle, node2);
-  }
-
   async refreshAddBody(): Promise<void> {
     const schema = await this.getSchema();
     await this.restage.select(schema.locator('#rmlRequestType'), 'body'); // "Type"

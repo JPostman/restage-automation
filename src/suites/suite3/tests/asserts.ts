@@ -54,7 +54,7 @@ export class Asserts {
 		id = GET_AUTH,\n\t\t` +
           (classVars
             ? `tags = LOGIN,
-		dependsOn = SET_AUTH`
+		dependsOn = LOGIN_REQ`
             : `folder = "Auth",
 		request = "Login user",
 		tags = LOGIN`) +
@@ -80,28 +80,105 @@ export class Asserts {
     );
   }
 
-  addAuthUser(): string {
+  addAuthUser(classVars: string = '', body: string = ''): string {
     return (
-      this.varsLoginUser('\n\tprivate final String SET_AUTH = "#token";') +
+      this.varsLoginUser(classVars + '\n\tprivate final String LOGIN_REQ = "#login";') +
       '\n\t' +
-      this.resources.normalize(`
-  @JPostman.Response(
-		folder = "Auth",
-		request = "Get Auth User"
+      this.resources.normalize(
+        `
+  @JPostman.Response(\n\t\t` +
+          (classVars
+            ? `dependsOn = SET_AUTH`
+            : `folder = "Auth",
+		request = "Get Auth User"`) +
+          `
 	)
 	@Test
 	public void getAuthUser() {
 	}
-
-
+` +
+          (body ? '' : '\n') +
+          `
 	@JPostman.Request(
-		id = SET_AUTH,
+		id = LOGIN_REQ,
 		folder = "Auth",
 		request = "Login user"
 	)
 	public void setAuthToken(
 		JPostman.Test test,
+		JPostman.Info info) {\n` +
+          body +
+          `	}`,
+      ) +
+      '\n'
+    );
+  }
+
+  authUserRequestBody(classVars: string = ''): string {
+    return this.addAuthUser(
+      classVars,
+      `\t\tinfo.body("username",
+			test.get("username"));\n`,
+    );
+  }
+
+  createAuthRequest(): string {
+    return (
+      this.authUserRequestBody('\n\tprivate final String SET_AUTH = "#setAuth";') +
+      '\n\n\t' +
+      this.resources.normalize(`
+  @JPostman.Request(
+		id = SET_AUTH,
+		folder = "Auth",
+		request = "Get Auth User"
+	)
+	public void authRequest(
+		JPostman.Test test,
 		JPostman.Info info) {
+	}`) +
+      '\n'
+    );
+  }
+
+  createAuthToken(): string {
+    return (
+      this.authUserRequestBody('\n\tprivate final String SET_AUTH = "#setAuth";') +
+      '\n\t' +
+      this.resources.normalize(`
+  @JPostman.Request(
+		id = SET_AUTH,
+		folder = "Auth",
+		request = "Get Auth User",
+		dependsOn = GET_AUTH
+	)
+	public void authRequest(
+		JPostman.Test test,
+		JPostman.Info info) {
+		info.sauth("oauth2",
+			test.get("accessToken"));
+	}`) +
+      '\n'
+    );
+  }
+
+  addRefreshToken(): string {
+    return (
+      this.createAuthToken() +
+      '\n\t' +
+      this.resources.normalize(`
+  @JPostman.Call(
+		folder = "Auth",
+		request = "Refresh token",
+		dependsOn = GET_AUTH
+	)
+	@Test
+	public void refreshToken() {
+		runtime.call((t /*test*/, i /*info*/) -> {
+			i.sauth("oauth2",
+				t.get("accessToken"));
+			i.sbody("refreshToken",
+				t.get("refreshToken"));
+		});
 	}`) +
       '\n'
     );
@@ -132,6 +209,30 @@ export class Asserts {
   async validateAddAuthUser(): Promise<void> {
     const actual = await this.getJavaFile();
     const expected = this.addAuthUser() + '}';
+    assert.strictEqual(actual, expected);
+  }
+
+  async validateAuthUserRequestBody(): Promise<void> {
+    const actual = await this.getJavaFile();
+    const expected = this.authUserRequestBody() + '}';
+    assert.strictEqual(actual, expected);
+  }
+
+  async validateCreateAuthRequest(): Promise<void> {
+    const actual = await this.getJavaFile();
+    const expected = this.createAuthRequest() + '}';
+    assert.strictEqual(actual, expected);
+  }
+
+  async validateCreateAuthToken(): Promise<void> {
+    const actual = await this.getJavaFile();
+    const expected = this.createAuthToken() + '}';
+    assert.strictEqual(actual, expected);
+  }
+
+  async validateAddRefreshToken(): Promise<void> {
+    const actual = await this.getJavaFile();
+    const expected = this.addRefreshToken() + '}';
     assert.strictEqual(actual, expected);
   }
 }

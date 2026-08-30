@@ -56,6 +56,17 @@ export class Rml {
     await this.restage.waitVisible(schema.getByTestId(`rml-runner-${name}`));
   }
 
+  async userDepedency(method1: string, method2: string): Promise<void> {
+    const schema = await this.getSchema();
+    const node1 = schema.locator(`[data-source-method="${method1}"]`);
+    const node2 = schema.locator(`[data-source-method="${method2}"]`);
+    await this.restage.click(node1);
+    const handle = node1.locator('[id^="rmlNode-"][id$="-dependency"]'); // "Add dependency connection"
+    await this.restage.waitVisible(handle);
+    await this.restage.waitVisible(node2);
+    await this.restage.drag(handle, node2);
+  }
+
   async addNode(folder: string, method: string, request: string): Promise<void> {
     const schema = await this.getSchema();
     const runnerNode = schema.getByTestId(`rml-runner-${folder}`);

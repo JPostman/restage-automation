@@ -36,6 +36,14 @@ test.describe('Suite 3', () => {
     await _asserts.validateVarsLoginUser();
     await _rmlTest.addAuthUser();
     await _asserts.validateAddAuthUser();
+    await _rmlTest.authUserRequestBody();
+    await _asserts.validateAuthUserRequestBody();
+    await _rmlTest.createAuthRequest();
+    await _asserts.validateCreateAuthRequest();
+    await _rmlTest.createAuthToken();
+    await _asserts.validateCreateAuthToken();
+    await _rmlTest.addRefreshToken();
+    await _asserts.validateAddRefreshToken();
   });
 
   test('Test AI Engine', async () => {
