@@ -16,7 +16,8 @@ export class Asserts {
         classVars,
       }) +
       '\n\t' +
-      this.resources.normalize(`@JPostman.Runner(
+      this.resources.normalize(`
+  @JPostman.Runner(
 		folder = "Auth"
 	)
 	@Test

@@ -10,7 +10,7 @@ export class WizardTest extends Wizard {
     await this.setProject(this.restage.rootDir);
     await this.setGroupId('io.restage');
     await this.setArtifactId('automation');
-    await this.setClassName('RestageDemo');
+    await this.setClassName('RestageDemoTest');
     await this.setFramework('TestNG');
     await this.extensions();
     await this.generateProject();

@@ -7,15 +7,21 @@ info:
   version: "0.1.0"
 servers:
 - url: "http://127.0.0.1:8091"
-  description: "Generated server url"
+  description: "Local ReStage test server"
 tags:
 - name: "Auth"
   description: "Authentication chain used to test cached response dependencies."
 - name: "Chain"
   description: "Small stateful chain for cache, response-path, variables, and dynamic\
     \ URL tests."
+  x-restage-variable-prefix:
+    value: "none"
 - name: "Echo"
   description: "Covers method, path, query, header, auth, and body mutation features."
+- name: "Request Values"
+  description: "Placeholder replacement and path/query/header/auth/body mutation cases."
+  x-restage-variable-prefix:
+    value: "none"
 - name: "Status"
   description: "Deterministic status-code and validation scenarios."
 paths:
@@ -49,8 +55,11 @@ paths:
           description: "Unauthorized"
           content:
             application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
               example:
-                message: "Access token is required"
+                errors:
+                - message: "Access token is required"
   /auth/login:
     post:
       tags:
@@ -94,6 +103,12 @@ paths:
       - "Auth"
       summary: "Refresh auth session/token"
       operationId: "refresh"
+      parameters:
+      - name: "Authorization"
+        in: "header"
+        required: false
+        schema:
+          type: "string"
       requestBody:
         content:
           application/json:
@@ -121,12 +136,26 @@ paths:
                   firstName: "Emily"
                   lastName: "Johnson"
                   role: "admin"
+        "401":
+          description: "Unauthorized"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors:
+                - message: "Invalid refresh token"
+                - message: "Access token is required"
         "403":
           description: "Forbidden"
           content:
             application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
               example:
-                message: "Invalid refresh token"
+                errors:
+                - message: "Invalid refresh token"
+                - message: "Access token is required"
   /chain/{chainId}/items/{itemId}:
     post:
       tags:
@@ -149,9 +178,20 @@ paths:
         required: true
         schema:
           type: "string"
+      - name: "Authorization"
+        in: "header"
+        required: false
+        schema:
+          type: "string"
       - name: "X-Chain-Token"
         in: "header"
-        required: true
+        required: false
+        schema:
+          type: "string"
+          default: ""
+      - name: "X-Refresh-Token"
+        in: "header"
+        required: false
         schema:
           type: "string"
       requestBody:
@@ -161,7 +201,7 @@ paths:
               type: "object"
               additionalProperties: {}
             example:
-              source: "#Ref1:data.value"
+              source: "{{chainSource}}"
               message: "hello"
               enabled: true
         required: true
@@ -175,17 +215,26 @@ paths:
                 itemId: "item-1002"
                 queryToken: "query-item-1002"
                 headerToken: "header-item-1002"
+                refreshToken: "refresh-emilys-1002"
                 body:
-                  source: "#Ref1:data.value"
+                  source: "Hello World"
                   message: "hello"
                   enabled: true
                 resultCode: "accepted-item-1002"
+      x-restage-order:
+        value: "20"
   /chain/start:
     post:
       tags:
       - "Chain"
       summary: "Create chain seed"
       operationId: "start"
+      parameters:
+      - name: "Authorization"
+        in: "header"
+        required: false
+        schema:
+          type: "string"
       requestBody:
         content:
           application/json:
@@ -216,6 +265,8 @@ paths:
                   flags:
                   - "cache"
                   - "response-path"
+      x-restage-order:
+        value: "10"
   /chain/{chainId}/result:
     get:
       tags:
@@ -226,6 +277,11 @@ paths:
       - name: "chainId"
         in: "path"
         required: true
+        schema:
+          type: "string"
+      - name: "Authorization"
+        in: "header"
+        required: false
         schema:
           type: "string"
       responses:
@@ -246,6 +302,8 @@ paths:
                 links:
                   self: "/chain/chain-1001/result"
                   echo: "/echo/body"
+      x-restage-order:
+        value: "30"
   /echo/methods/{id}:
     delete:
       tags:
@@ -521,6 +579,80 @@ paths:
                   - "Bearer demo-token"
                   x-test-header:
                   - "hello"
+  /request-values/{chainId}/items/{itemId}:
+    post:
+      tags:
+      - "Request Values"
+      summary: "Resolve and append request values"
+      operationId: "resolve"
+      parameters:
+      - name: "chainId"
+        in: "path"
+        required: true
+        schema:
+          type: "string"
+      - name: "itemId"
+        in: "path"
+        required: true
+        schema:
+          type: "string"
+      - name: "token"
+        in: "query"
+        required: false
+        schema:
+          type: "string"
+      - name: "query"
+        in: "query"
+        required: true
+        schema:
+          type: "object"
+          additionalProperties:
+            type: "string"
+      - name: "X-Template-Token"
+        in: "header"
+        required: false
+        schema:
+          type: "string"
+      - name: "Authorization"
+        in: "header"
+        required: false
+        schema:
+          type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+              additionalProperties: {}
+            example:
+              existingBody: "{{bodyValue}}"
+              fixedBody: "keep-me"
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              example:
+                chainId: "chain-1001"
+                itemId: "item-1001"
+                appendedPath: "/path1/path2/path3"
+                pathSegments:
+                - "path1"
+                - "path2"
+                - "path3"
+                requestPath: "/request-values/chain-1001/items/item-1001/path1/path2/path3"
+                token: "query-secret"
+                query:
+                  token: "query-secret"
+                  TEST_QUERY: "chain-1001"
+                templateHeader: "header-secret"
+                authorization: "Bearer access-token"
+                body:
+                  existingBody: "resolved"
+                  fixedBody: "keep-me"
+                  addedBody: "new"
+      x-restage-order:
+        value: "10"
   /status/delay/{milliseconds}:
     get:
       tags:
@@ -562,7 +694,6 @@ paths:
             '*/*':
               schema:
                 type: "object"
-                additionalProperties: {}
 components:
   schemas:
     RefreshRequest:
@@ -617,6 +748,20 @@ components:
         role:
           type: "string"
           example: "admin"
+    Error:
+      type: "object"
+      properties:
+        message:
+          type: "string"
+          example: "Invalid refresh token"
+    ErrorResponse:
+      type: "object"
+      description: "Common error response returned by REST endpoints."
+      properties:
+        errors:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/Error"
     LoginRequest:
       type: "object"
       description: "Credentials and desired token lifetime."

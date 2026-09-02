@@ -16,7 +16,8 @@ export class Asserts {
         classVars: '\n\tprivate final String GET_AUTH = "#getAuth";' + '\n\tprivate final String SET_AUTH = "#setAuth";' + '\n\tprivate final String CACHE_TOKEN = "token";\n\n',
       }) +
       '\n\t' +
-      this.resources.normalize(`@JPostman.Runner(
+      this.resources.normalize(`
+  @JPostman.Runner(
 		folder = "Auth"
 	)
 	@Test
@@ -30,7 +31,8 @@ export class Asserts {
     return (
       this.addAuthFolderCode() +
       '\n\t' +
-      this.resources.normalize(`@JPostman.Response(
+      this.resources.normalize(`
+  @JPostman.Response(
 		id = GET_AUTH,
 		folder = "Auth",
 		request = "Login user",

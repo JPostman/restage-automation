@@ -27,33 +27,78 @@ export class Rml {
   }
 
   async openRmlTab(): Promise<void> {
-    await this.restage.waitFor(
-      async () => {
-        const schema = await this.restage.findFrame('ReSTage API Schema');
-        if (schema) {
-          const rmlTab = schema.getByTestId('api-schema-rml-tab');
-          if (await this.restage.exists(rmlTab)) {
-            await this.restage.click(rmlTab);
-          }
-          if (await this.restage.visible(schema.getByText('REST Modeling Language'))) {
-            return true;
-          }
-        }
-        return false;
-      },
-      (exists) => exists,
-    );
+    // Every Playwright project can start in a fresh VS Code window. Suite 1
+    // often leaves API Schema open, but later suites must not depend on that
+    // state. Open the webview first, then select RML deterministically.
+    await this.restage.toogleApiSchema();
+    const schema = await this.restage.waitFrameLocator('ReSTage API Schema', '#apiSettingsOpen', 60_000);
+    const rmlTab = schema.getByTestId('api-schema-rml-tab');
+    await this.restage.waitVisible(rmlTab, 60_000);
+    await this.restage.click(rmlTab);
+    await this.restage.waitVisible(schema.getByText('REST Modeling Language'), 60_000);
     await this.restage.sleep();
   }
 
   async dragAndDropFolder(name: string): Promise<void> {
     const schema = await this.getSchema();
     const testFlow = schema.getByTestId('rml-test-flow');
-    const folder = schema.getByTestId(`rml-folder-${name}-drag`).first();
+    const expectedPath = String(name || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^\/+|\/+$/g, '');
+    const escapedPath = expectedPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    // Keep the locator itself bound to the immutable folder path. Returning an
+    // nth(index) locator is unsafe because Playwright locators are live and a
+    // webview refresh can reorder the folder list before dragTo() resolves it.
+    const folder = schema.locator(`summary[data-folder-path="${escapedPath}" i], summary[data-folder-path$="/${escapedPath}" i]`).filter({ visible: true }).first();
     await this.restage.waitVisible(folder);
+
     await this.restage.waitVisible(testFlow);
-    await this.restage.drag(folder, testFlow);
-    await this.restage.waitVisible(schema.getByTestId(`rml-runner-${name}`));
+    const runner = schema.getByTestId(`rml-runner-${name}`);
+    const builderMessage = schema.locator('#builderMessage');
+
+    // Playwright's dragTo() can complete after pointer movement without
+    // delivering the HTML5 DataTransfer payload expected by Studio. This is
+    // especially visible after the folders pane is collapsed and expanded:
+    // the source summary has been re-rendered, the log reports a drag, but the
+    // drop handler never receives application/x-restage-rml. Dispatch the full
+    // HTML5 sequence in the webview so Studio builds its payload in dragstart
+    // and receives that same DataTransfer object in drop.
+    await folder.evaluate((source) => {
+      const target = document.querySelector('[data-testid="rml-test-flow"]');
+      if (!(target instanceof HTMLElement)) {
+        throw new Error('RML Test Flow drop zone was not found.');
+      }
+      const dataTransfer = new DataTransfer();
+      const dispatch = (element: Element, type: string) => element.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer }));
+      dispatch(source, 'dragstart');
+      dispatch(target, 'dragenter');
+      dispatch(target, 'dragover');
+      dispatch(target, 'drop');
+      dispatch(source, 'dragend');
+    });
+
+    const outcome = await this.restage.waitFor(
+      async () => {
+        const runnerVisible = await runner.isVisible().catch(() => false);
+        const messageVisible = await builderMessage.isVisible().catch(() => false);
+        const messageClass = messageVisible ? String((await builderMessage.getAttribute('class')) || '') : '';
+        const message = messageVisible ? String((await builderMessage.textContent()) || '').trim() : '';
+        return { runnerVisible, errorVisible: messageClass.split(/\s+/).includes('error'), message };
+      },
+      (value) => value.runnerVisible || value.errorVisible,
+      60_000,
+    );
+    if (!outcome.runnerVisible) {
+      throw new Error(outcome.message || `Studio did not create Runner ${JSON.stringify(name)}.`);
+    }
+    const runnerPath = String((await runner.getAttribute('data-folder-path')) || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^\/+|\/+$/g, '');
+    if (runnerPath && runnerPath !== expectedPath && !runnerPath.endsWith('/' + expectedPath)) {
+      throw new Error(`Dragged ${JSON.stringify(name)}, but Studio created Runner ${JSON.stringify(runnerPath)}.`);
+    }
   }
 
   async userDepedency(method1: string, method2: string): Promise<void> {
@@ -77,7 +122,7 @@ export class Rml {
     await this.restage.click(pin);
   }
 
-  async nodeAction(method: string, action: string): Promise<void> {
+  async nodeMenu(method: string, action: string): Promise<void> {
     const schema = await this.getSchema();
     const node = schema.locator(`[data-source-method="${method}"]:visible`);
     if ((await node.count()) > 1) {
@@ -89,14 +134,11 @@ export class Rml {
     await this.restage.click(menu);
 
     const actionIdSuffix: Record<string, string> = {
-      Remove: 'remove',
       'Run Test': 'run-test',
-      Cache: 'cache',
       Actions: 'request',
       Assertions: 'asserts',
-      Properties: 'properties',
     };
-    const suffix = actionIdSuffix[action];
+    const suffix = actionIdSuffix[action] || action.toLowerCase();
     if (!suffix) throw new Error(`Unsupported node action: ${action}`);
     const item = node.locator(`[id^="rmlNodeAction-"][id$="-${suffix}"]`); // Current label is `action`.
     await this.restage.waitVisible(item);

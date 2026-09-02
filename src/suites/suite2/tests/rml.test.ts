@@ -19,20 +19,20 @@ export class RmlTest extends Rml {
   async addLoginUser(): Promise<void> {
     await this.addNode('auth', 'POST', 'Login user');
     await this.cacheAccessToken('loginUserAuthToken');
-    await this.nodeAction('loginUserAuthToken', 'Run Test');
+    await this.nodeMenu('loginUserAuthToken', 'Run Test');
     await this.asserts.validateCurrentUser(this.runTestDialog());
   }
 
   async addAuthUser(): Promise<void> {
     await this.addNode('auth', 'GET', 'Get Auth User');
-    await this.nodeAction('getAuthUser', 'Run Test');
+    await this.nodeMenu('getAuthUser', 'Run Test');
     await this.asserts.validateAccessTokenError(this.runTestDialog());
   }
 
   async cacheAccessToken(method: string): Promise<void> {
     const schema = await this.getSchema();
     const notAvailable = schema.getByText('Response not available. Click');
-    await this.nodeAction('loginUser', 'Cache');
+    await this.nodeMenu('loginUser', 'Cache');
     await this.restage.click(schema.getByRole('button', { name: 'Select ID class variable' }));
     await this.restage.click(schema.getByRole('menuitem', { name: 'GET_AUTH #getAuth' }));
     await this.restage.fill(schema.getByRole('textbox', { name: 'Method Name' }), method);
@@ -53,7 +53,7 @@ export class RmlTest extends Rml {
 
   async createRequestToken(): Promise<void> {
     const schema = await this.getSchema();
-    await this.nodeAction('getAuthUser', 'Actions');
+    await this.nodeMenu('getAuthUser', 'Actions');
     await this.restage.click(schema.getByRole('button', { name: 'Create Request' }));
     await this.restage.click(schema.getByRole('radio', { name: 'Request runs before Response' }));
     await this.restage.fill(schema.getByRole('textbox', { name: 'Request method name' }), 'authRequest');
@@ -73,28 +73,28 @@ export class RmlTest extends Rml {
   }
 
   async addUserDependencies(): Promise<void> {
-    await this.nodeAction('authRequest', 'Actions');
+    await this.nodeMenu('authRequest', 'Actions');
     await this.addAuthDependency();
-    await this.nodeAction('getAuthUser', 'Run Test');
+    await this.nodeMenu('getAuthUser', 'Run Test');
     await this.asserts.validateCurrentUser(this.runTestDialog());
   }
 
   async addRefreshToken(): Promise<void> {
     await this.addNode('auth', 'POST', 'Refresh token');
-    await this.nodeAction('refreshToken', 'Run Test');
+    await this.nodeMenu('refreshToken', 'Run Test');
     await this.asserts.validateAccessRefreshTokenError(this.runTestDialog());
   }
 
   async addRefreshDependencies(): Promise<void> {
-    await this.nodeAction('refreshToken', 'Actions');
+    await this.nodeMenu('refreshToken', 'Actions');
     await this.addAuthDependency();
-    await this.nodeAction('refreshToken', 'Run Test');
+    await this.nodeMenu('refreshToken', 'Run Test');
     await this.asserts.validateRefreshTokenError(this.runTestDialog());
   }
 
   async addRefreshBody(): Promise<void> {
     const schema = await this.getSchema();
-    await this.nodeAction('refreshToken', 'Actions');
+    await this.nodeMenu('refreshToken', 'Actions');
 
     await this.restage.select(schema.locator('#rmlRequestType'), 'body'); // "Edit Actions" → "Body"
     await this.restage.click(schema.getByRole('button', { name: 'Open Variable Name or Name /' }));
@@ -106,7 +106,7 @@ export class RmlTest extends Rml {
     await this.add();
     await this.done();
 
-    await this.nodeAction('refreshToken', 'Run Test');
+    await this.nodeMenu('refreshToken', 'Run Test');
     await this.asserts.validateRefreshToken(this.runTestDialog());
   }
 

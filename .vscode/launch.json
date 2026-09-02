@@ -72,7 +72,8 @@
       "options": [
         "suite1",
         "suite2",
-        "suite3"
+        "suite3",
+        "suite4"
       ],
       "default": "suite1"
     }

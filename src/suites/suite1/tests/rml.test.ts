@@ -16,35 +16,35 @@ export class RmlTest extends Rml {
 
   async addLoginUser(): Promise<void> {
     await this.addNode('auth', 'POST', 'Login user');
-    await this.nodeAction('login', 'Cache');
+    await this.nodeMenu('login', 'Cache');
     await this.apply();
-    await this.nodeAction('login', 'Run Test');
+    await this.nodeMenu('login', 'Run Test');
     await this.asserts.validateLoginUser(this.runTestDialog());
   }
 
   async addAuthUser(): Promise<void> {
     await this.addNode('auth', 'GET', 'Get Auth User');
-    await this.nodeAction('me', 'Run Test');
+    await this.nodeMenu('me', 'Run Test');
     await this.runTestDialog();
     await this.userDepedency('me', RML_SET_TOKEN);
-    await this.nodeAction('me', 'Run Test');
+    await this.nodeMenu('me', 'Run Test');
     await this.asserts.validateCurrentUser(this.runTestDialog());
   }
 
   async addRefreshToken(): Promise<void> {
     await this.addNode('auth', 'POST', 'Refresh token');
-    await this.nodeAction('refresh', 'Run Test');
+    await this.nodeMenu('refresh', 'Run Test');
     await this.runTestDialog();
     await this.userDepedency('refresh', RML_SET_TOKEN);
-    await this.nodeAction('refresh', 'Actions');
+    await this.nodeMenu('refresh', 'Actions');
     await this.refreshAddBody();
-    await this.nodeAction('refresh', 'Run Test');
+    await this.nodeMenu('refresh', 'Run Test');
     await this.asserts.validateRefreshToken(this.runTestDialog());
   }
 
   async createRequestToken(): Promise<void> {
     const schema = await this.getSchema();
-    await this.nodeAction('login', 'Actions');
+    await this.nodeMenu('login', 'Actions');
     await this.restage.click(schema.locator('#rmlRequestCreateDependency')); // "Create Request"
     await this.restage.check(schema.locator('#rmlRequestSaveDependent')); // "Request runs after Response"
     await this.restage.fill(schema.locator('#rmlRequestDependencyName'), RML_SET_TOKEN); // "Request method name"
@@ -54,15 +54,15 @@ export class RmlTest extends Rml {
 
   async setRequestToken(): Promise<void> {
     const schema = await this.getSchema();
-    await this.nodeAction(RML_SET_TOKEN, 'Actions');
+    await this.nodeMenu(RML_SET_TOKEN, 'Actions');
     await this.restage.select(schema.locator('#rmlRequestType'), 'auth'); // "Type"
     await this.restage.click(schema.locator('#rmlRequestEnvironment')); // "Select Cache, Response, Request, Variable, or Environment value"
     await this.restage.click(schema.getByRole('menuitem', { name: 'Cache Value Read directly' }));
     await this.restage.click(schema.locator('#rmlRequestCachePathPicker')); // "Select a path from the response body"
     await this.restage.click(schema.locator('#rmlAssertionResponseTree button').filter({ hasText: 'accessToken' })); // Current option starts with `accessToken: "access-emilys-`.
-    await this.restage.click(schema.locator('#rmlRequestCacheApply')); // "Apply"
-    await this.restage.click(schema.locator('#rmlRequestAdd')); // "Add"
-    await this.restage.click(schema.locator('#rmlRequestCancel')); // "Done"
+    await this.apply(); // "Apply"
+    await this.add(); // "Add"
+    await this.done(); // "Done"
   }
 
   async refreshAddBody(): Promise<void> {
@@ -76,7 +76,7 @@ export class RmlTest extends Rml {
     await this.restage.click(schema.locator('#rmlRequestCachePathPicker')); // "Select a path from the response body"
     await this.restage.click(schema.getByRole('button', { name: /refreshToken.*/ }));
     await this.apply();
-    await this.restage.click(schema.locator('#rmlRequestAdd')); // "Add"
-    await this.restage.click(schema.locator('#rmlRequestCancel')); // "Done"
+    await this.add(); // "Add"
+    await this.done(); // "Done"
   }
 }

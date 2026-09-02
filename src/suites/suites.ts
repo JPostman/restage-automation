@@ -36,11 +36,7 @@ function log(message: string): void {
   console.log(`[Suites] ${message}`);
 }
 
-export class TestSuites {
-  static readonly SUITE_1 = 'suite1' as const;
-  static readonly SUITE_2 = 'suite2' as const;
-  static readonly SUITE_3 = 'suite3' as const;
-}
+const SUITE_1 = 'suite1';
 
 type RuntimeState = {
   ownerPid?: number;
@@ -317,22 +313,28 @@ export const test = base.extend<{}, WorkerFixtures>({
       const page = await workbenchPage(browser);
       const restage = new ReStage(DEMO_PROJECT, page, testTarget, openInspector);
       const notification = page.getByRole('button', { name: 'Do Not Disturb' });
+      let doNotDisturbEnabledByFixture = false;
 
       await restage.sleep(1_000);
       try {
-        // Disable notidications
-        if (!(await restage.visible(notification))) {
-          await restage.click(page.getByRole('button', { name: 'Notifications' }));
+        // Suppress notifications without allowing optional VS Code chrome to
+        // fail the worker fixture. Remember ownership so an already-enabled
+        // user setting is never disabled during teardown.
+        if (!(await notification.isVisible())) {
+          const notifications = page.getByRole('button', { name: 'Notifications' });
+          if (!(await notifications.isVisible())) throw new Error('Notifications button is not visible.');
+          await notifications.click({ timeout: 2_000 });
           const doNotDisturb = page.getByRole('button', { name: 'Configure Do Not Disturb...' });
-          if ((await restage.exists(doNotDisturb)) && (await doNotDisturb.isVisible())) {
-            await restage.click(doNotDisturb);
-          }
+          await doNotDisturb.click({ timeout: 2_000 });
           const enableDoNotDisturb = page.getByRole('menuitem', { name: 'Enable Do Not Disturb Mode' });
-          if ((await restage.exists(enableDoNotDisturb)) && (await enableDoNotDisturb.isVisible())) {
-            await restage.click(enableDoNotDisturb);
-          }
+          await enableDoNotDisturb.click({ timeout: 2_000 });
+          doNotDisturbEnabledByFixture = true;
         }
+      } catch (error) {
+        log(`Could not enable Do Not Disturb; continuing tests: ${error instanceof Error ? error.message : String(error)}`);
+      }
 
+      try {
         await use(restage);
       } finally {
         // Completion Inspector is handled by each suite's afterAll hook while
@@ -340,15 +342,19 @@ export const test = base.extend<{}, WorkerFixtures>({
         // teardown on user interaction. The session owner watches the runner
         // PID and shuts the UI down only after the whole Playwright run exits.
         log(`Worker ${workerInfo.workerIndex} finished; keeping the ReSTage UI/session alive until runner shutdown.`);
-      }
 
-      try {
-        // Enable notidications
-        await restage.click(notification);
-        await restage.click(page.getByRole('button', { name: 'Configure Do Not Disturb...' }));
-        await restage.click(page.getByRole('menuitem', { name: 'Disable Do Not Disturb Mode' }));
-      } finally {
-        log(`Notidications restore.`);
+        if (doNotDisturbEnabledByFixture) {
+          try {
+            await notification.click({ timeout: 2_000 });
+            await page.getByRole('button', { name: 'Configure Do Not Disturb...' }).click({ timeout: 2_000 });
+            await page.getByRole('menuitem', { name: 'Disable Do Not Disturb Mode' }).click({ timeout: 2_000 });
+            log('Notifications restored.');
+          } catch (error) {
+            // Notification chrome is optional cleanup. Never fail a completed
+            // test or the next worker when VS Code closes or changes menus.
+            log(`Could not restore notifications; ignoring teardown cleanup: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
       }
     },
     { scope: 'worker', timeout: 180_000 },
@@ -363,8 +369,7 @@ export async function prepareTestContext(restage: ReStage, suite: string): Promi
   await restage.click(activityItem);
 
   const actions = restage.page.getByRole('button', { name: 'Actions Section' });
-  const timeout = suite == TestSuites.SUITE_1 ? 1_000 : 5_000;
-  const projectExists = await restage.waitExists(actions, timeout);
+  const projectExists = await restage.waitExists(actions, suite == SUITE_1 ? 1_000 : 5_000);
   if (projectExists) {
     const resources = new Resources(restage);
     const file = restage.page.getByRole('tab', { name: Resources.DEFAULT_FILE });
@@ -390,10 +395,25 @@ export async function prepareTestContext(restage: ReStage, suite: string): Promi
 
   await restage.waitFrame('Project Wizard');
 
-  if (suite !== TestSuites.SUITE_1) {
+  if (suite !== SUITE_1) {
     const wizard = new Wizard(restage);
     await wizard.setProject(restage.rootDir);
+
+    // A fresh VS Code process takes the Project Wizard branch even though the
+    // generated project is reused from Suite 1. Reset the Java source here as
+    // well; otherwise every later suite inherits annotations, class variables,
+    // and pinned RML nodes created by the previous suite. Write before opening
+    // the project so the editor and Java extension load the reset source.
+    const resources = new Resources(restage);
+    const initialSource = resources.tempate() + '}';
+    resources.writePath(resources.main(), initialSource);
     await wizard.openProject();
+    await restage.waitFor(
+      async () => resources.load(resources.main()) === resources.normalize(initialSource),
+      (matches) => matches,
+      20_000,
+    );
+    await restage.sleep(500);
   }
 }
 

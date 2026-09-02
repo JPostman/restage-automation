@@ -13,7 +13,9 @@ const PROJECT_ROOT = process.cwd();
 const VSIX_PATH = path.join(PROJECT_ROOT, 'restage-studio.vsix');
 const TEMP_ROOT = process.env.TEMP || process.env.TMPDIR || process.env.TMP || os.tmpdir();
 const DEMO_PROJECT = path.join(TEMP_ROOT, 'restage-demo');
-const RUN_ROOT = path.join(TEMP_ROOT, `restage-automation`);
+// A unique profile per launcher prevents a stale VS Code process from owning
+// the extension/profile directories used by the next automation run.
+const RUN_ROOT = path.join(TEMP_ROOT, 'restage-automation', String(process.pid));
 const USER_DATA_DIR = path.join(RUN_ROOT, 'vscode');
 const EXTENSIONS_DIR = path.join(RUN_ROOT, 'extensions');
 const VSCODE_SETTINGS = path.join(PROJECT_ROOT, '.vscode', 'settings.json');
@@ -45,6 +47,7 @@ const BENIGN_VSCODE_LOG_PATTERNS: RegExp[] = [
   /Use `Code --trace-deprecation/i,
   /Extension host with pid .* exited with code:\s*0\b/i,
   /Unknown channel:\s*agentHostClientProxy/i,
+  /Error mutex already exists/i,
 ];
 
 function isImportantVsCodeLog(line: string): boolean {
@@ -124,7 +127,11 @@ function installVsix(): void {
 
   log(`Installing local ReSTage extension into isolated directory: ${EXTENSIONS_DIR}`);
 
-  const args = ['--extensions-dir', EXTENSIONS_DIR, '--install-extension', VSIX_PATH, '--force'];
+  // Supplying only --extensions-dir is not enough: the `code` CLI may attach
+  // to a running normal VS Code profile and reject replacement of an extension
+  // that profile currently has loaded. Use the same isolated user profile that
+  // the automation window will use.
+  const args = ['--user-data-dir', USER_DATA_DIR, '--extensions-dir', EXTENSIONS_DIR, '--install-extension', VSIX_PATH, '--force'];
 
   const result =
     process.platform === 'win32'
@@ -166,6 +173,9 @@ function prepareTempProject(): void {
   const userDir = path.join(USER_DATA_DIR, 'User');
   if (target === 'all' || target === 'suite1') {
     fs.rmSync(DEMO_PROJECT, { recursive: true, force: true });
+    log(`Deleted temporary project if present: ${DEMO_PROJECT}`);
+  } else {
+    log(`Preserving temporary project for ${target}: ${DEMO_PROJECT}`);
   }
   fs.mkdirSync(EXTENSIONS_DIR, { recursive: true });
   fs.mkdirSync(userDir, { recursive: true });
@@ -190,7 +200,6 @@ function prepareTempProject(): void {
 
   fs.writeFileSync(path.join(userDir, 'settings.json'), `${JSON.stringify(userSettings, null, 2)}\n`, 'utf8');
 
-  log(`Deleted temporary project if present: ${DEMO_PROJECT}`);
   log(`Using isolated run directory: ${RUN_ROOT}`);
   log(`Using isolated extension directory: ${EXTENSIONS_DIR}`);
   log('Normal user extensions are excluded; VS Code AI/Chat is disabled for this automation profile.');
@@ -293,7 +302,7 @@ function cleanupRunDirectory(): void {
     log(`Deleted isolated run directory: ${RUN_ROOT}`);
   } catch (error) {
     // Windows may keep a VS Code file handle briefly after process exit.
-    // A future run uses a different directory, so cleanup failure is harmless.
+    // Every process uses a different directory, so cleanup failure is harmless.
     log(`Could not delete isolated run directory yet: ${error instanceof Error ? error.message : String(error)}`);
   }
 }

@@ -6,7 +6,7 @@ export class Resources {
   readonly root: string;
   protected previousContent: string = '';
 
-  public static DEFAULT_FILE = 'RestageDemo.java';
+  public static DEFAULT_FILE = 'RestageDemoTest.java';
 
   constructor(private readonly restage: ReStage) {
     this.root = path.join(process.cwd());
@@ -84,7 +84,7 @@ package io.restage;
 import io.jpostman.annotations.JPostman;
 ${opt?.addImport || ''}
 @JPostman.TestNG
-public class RestageDemo {
+public class RestageDemoTest {
 ${opt?.classVars || ''}
     @JPostman.Context
     JPostman.Runtime<JPostman.Test> runtime;

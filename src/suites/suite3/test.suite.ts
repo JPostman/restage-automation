@@ -26,7 +26,7 @@ test.describe('Suite 3', () => {
     await inspectTestClassOnComplete(restage, testInfo);
   });
 
-  test('Test RML', async () => {
+  test('Init RML', async () => {
     await _actions.open();
     await _rmlTest.init();
     await _asserts.validateAddAuthFolder();

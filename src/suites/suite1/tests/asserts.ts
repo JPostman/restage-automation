@@ -13,7 +13,8 @@ export class Asserts {
     return (
       this.resources.tempate({ addImport: 'import org.testng.annotations.Test;\n' }) +
       '\n\t' +
-      this.resources.normalize(`@JPostman.Runner(
+      this.resources.normalize(`
+  @JPostman.Runner(
 		folder = "Auth"
 	)
 	@Test
