@@ -1,15 +1,11 @@
-import { Resources } from '../../resources.js';
-import { FrameLocator, ReStage } from '../../restage.js';
+import { FrameLocator, Locator, ReStage } from '../../restage.js';
 import { RmlAsserts } from './rml_asserts.js';
 
 export class Rml {
-  protected readonly asserts: RmlAsserts;
-  protected readonly resources: Resources;
-
-  constructor(protected readonly restage: ReStage) {
-    this.asserts = new RmlAsserts(restage);
-    this.resources = new Resources(restage);
-  }
+  constructor(
+    protected readonly restage: ReStage,
+    protected readonly asserts: RmlAsserts = new RmlAsserts(restage),
+  ) {}
 
   protected async getSchema(): Promise<FrameLocator> {
     await this.restage.toogleApiSchema();
@@ -34,6 +30,10 @@ export class Rml {
     const schema = await this.restage.waitFrameLocator('ReSTage API Schema', '#apiSettingsOpen', 60_000);
     const rmlTab = schema.getByTestId('api-schema-rml-tab');
     await this.restage.waitVisible(rmlTab, 60_000);
+    // The webview creates the RML tab immediately, but keeps it disabled while
+    // the saved collection is restored through Engine-AI. Waiting only for
+    // visibility makes this race with the normal 10-second click timeout.
+    await this.restage.waitEnabled(rmlTab, 60_000);
     await this.restage.click(rmlTab);
     await this.restage.waitVisible(schema.getByText('REST Modeling Language'), 60_000);
     await this.restage.sleep();
@@ -120,6 +120,16 @@ export class Rml {
     const runnerRequest = runnerNode.locator('.rml-runner-request').filter({ hasText: method }).filter({ hasText: request });
     const pin = runnerRequest.locator('.rml-pin-button[title="Pin out: extract request as Response"]');
     await this.restage.click(pin);
+    try {
+      await pin.waitFor({ state: 'hidden', timeout: 3_000 });
+    } catch {
+      const message = String(
+        (await schema
+          .locator('#builderMessage')
+          .textContent()
+          .catch(() => '')) || '',
+      ).trim();
+    }
   }
 
   async nodeMenu(method: string, action: string): Promise<void> {
@@ -173,13 +183,20 @@ export class Rml {
       await this.restage.check(responseUnresolved);
     }
     // Read stored evidence: switching Headers on replaces the visible <pre> content.
-    const responseLog = await result.locator('.rml-run-response-evidence').getAttribute('data-body');
-    if (responseLog === null) throw new Error('The test result has no response log attribute.');
+    const responseLog = (await schema.locator('.rml-run-response-evidence').getAttribute('data-body')) || '';
     await this.restage.check(result.locator('.rml-run-response-headers')); // "Show response headers" / "Headers"
     await this.restage.check(result.locator('.rml-run-request-headers')); // "Show request headers" / "Headers"
     await this.restage.click(requestSection.locator(':scope > summary > .rml-run-chevron'));
     await this.restage.click(result.locator(':scope > summary > .rml-run-chevron'));
     await this.restage.click(schema.locator('#rmlRunResultMinimize')); // "Minimize dialog"
+    await this.restage.click(schema.locator('#rmlRunResultCloseIcon')); // "Close test result"
+    return responseLog;
+  }
+
+  async responseLog(): Promise<string> {
+    const schema = await this.getSchema();
+    await this.restage.defaultTestMenu();
+    const responseLog = (await schema.locator('.rml-run-response-evidence').getAttribute('data-body')) || '';
     await this.restage.click(schema.locator('#rmlRunResultCloseIcon')); // "Close test result"
     return responseLog;
   }
@@ -196,37 +213,149 @@ export class Rml {
     }
   }
 
+  private async visibleRmlControl(schema: FrameLocator, selectors: string[]): Promise<Locator> {
+    for (const selector of selectors) {
+      const locator = schema.locator(selector);
+      if (await locator.isVisible().catch(() => false)) return locator;
+    }
+    throw new Error(`No visible RML control found: ${selectors.join(', ')}`);
+  }
+
+  private async waitForClassVariableSave(dialog: Locator, save: Locator, timeout = 20_000): Promise<void> {
+    const message = dialog.locator('#rmlClassVariablesMessage');
+    const result = await this.restage.waitFor(
+      async () => {
+        const dialogVisible = await dialog.isVisible().catch(() => false);
+        const enabled = await save.isEnabled().catch(() => false);
+        const messageVisible = await message.isVisible().catch(() => false);
+        const messageClass = messageVisible ? String((await message.getAttribute('class')) || '') : '';
+        const text = messageVisible ? String((await message.textContent()) || '').trim() : '';
+        return {
+          dialogVisible,
+          enabled,
+          text,
+          success: messageClass.split(/\s+/).includes('success'),
+          error: messageClass.split(/\s+/).includes('error'),
+        };
+      },
+      (value) => !value.dialogVisible || (value.enabled && (value.success || value.error)),
+      timeout,
+      50,
+    );
+
+    if (result.error) throw new Error(result.text || 'Class Variable update failed.');
+  }
+
   async addClassVaraible(name: string, value: string): Promise<void> {
     const schema = await this.getSchema();
-    await this.restage.click(schema.getByRole('button', { name: 'RML options' }));
-    await this.restage.click(schema.getByRole('menuitem', { name: 'Class Variables' }));
-    await this.restage.fill(schema.getByRole('textbox', { name: 'Variable Name' }), name);
-    await this.restage.fill(schema.getByRole('textbox', { name: 'Value' }), value);
-    await this.add();
-    await this.done();
+    await this.restage.click(schema.locator('#rmlToolbarMenuToggle')); // "RML options"
+    await this.restage.click(schema.locator('#rmlClassVariables')); // "Class Variables"
+    const dialog = schema.locator('#rmlClassVariablesDialog');
+    await this.restage.fill(dialog.locator('#rmlClassVariableName'), name);
+    await this.restage.fill(dialog.locator('#rmlClassVariableValue'), value);
+
+    // Class Variable Add/Update writes Java immediately. Wait for Studio to
+    // report success (or close the dialog in selection mode) before continuing.
+    const save = dialog.locator('#rmlClassVariableSave');
+    await this.restage.click(save);
+    await this.waitForClassVariableSave(dialog, save);
+
+    await this.restage.click(dialog.locator('#rmlClassVariablesDone'));
+    await dialog.waitFor({ state: 'hidden', timeout: 20_000 });
   }
 
   async add(): Promise<void> {
     const schema = await this.getSchema();
-    await this.restage.click(schema.getByRole('button', { name: 'Add' })); // "Add"
+    const classVariableDialog = schema.locator('#rmlClassVariablesDialog');
+    const classVariableSave = classVariableDialog.locator('#rmlClassVariableSave');
+    if (await classVariableSave.isVisible().catch(() => false)) {
+      await this.restage.click(classVariableSave);
+      await this.waitForClassVariableSave(classVariableDialog, classVariableSave);
+      return;
+    }
+
+    const add = await this.visibleRmlControl(schema, ['#rmlRequestAdd', '#rmlAssertionAdd', '#rmlRulesAdd']);
+    await this.restage.click(add);
   }
 
   async update(): Promise<void> {
     const schema = await this.getSchema();
-    await this.restage.click(schema.getByRole('button', { name: 'Update' })); // "Update"
+    const classVariableDialog = schema.locator('#rmlClassVariablesDialog');
+    const classVariableSave = classVariableDialog.locator('#rmlClassVariableSave');
+    if (await classVariableSave.isVisible().catch(() => false)) {
+      await this.restage.click(classVariableSave);
+      await this.waitForClassVariableSave(classVariableDialog, classVariableSave);
+      return;
+    }
+
+    const update = await this.visibleRmlControl(schema, ['#rmlRequestAdd', '#rmlAssertionAdd', '#rmlRulesAdd']);
+    await this.restage.click(update);
+  }
+
+  private async clickAndWaitForDialogClose(locator: Locator, timeout = 20_000): Promise<void> {
+    // Engine-backed Apply/Done handlers close their dialog only after the
+    // Engine-AI response has been applied and the Java document has been saved.
+    const dialog = locator.locator('xpath=ancestor::*[@role="dialog"][1]');
+    const hasDialog = (await dialog.count()) > 0;
+
+    await this.restage.click(locator);
+
+    if (hasDialog) {
+      await dialog.waitFor({ state: 'hidden', timeout });
+    }
   }
 
   async apply(): Promise<void> {
     const schema = await this.getSchema();
-    await this.resources.mainReset();
-    await this.restage.click(schema.getByRole('button', { name: 'Apply' })); // "Apply"
-    await this.resources.mainUpdated();
+    const apply = await this.visibleRmlControl(schema, ['#rmlRequestSaveApply', '#rmlResponseCacheApply', '#rmlRequestCacheApply']);
+
+    // Response Cache and Apply Actions close only after their Engine-backed
+    // Java update is complete. Request Cache is a local picker and closes
+    // synchronously; the same dialog-close wait is safe for all three.
+    await this.clickAndWaitForDialogClose(apply);
+  }
+
+  private async doneRequestEditor(timeout = 20_000): Promise<void> {
+    const schema = await this.getSchema();
+    const done = schema.locator('#rmlRequestCancel');
+    const editorDialog = schema.locator('#rmlRequestEditorDialog');
+    const saveDialog = schema.locator('#rmlRequestSaveDialog');
+    const message = schema.locator('#rmlRequestEditorMessage');
+
+    await this.restage.click(done);
+
+    const result = await this.restage.waitFor(
+      async () => {
+        const editorVisible = await editorDialog.isVisible().catch(() => false);
+        const saveVisible = await saveDialog.isVisible().catch(() => false);
+        const messageVisible = await message.isVisible().catch(() => false);
+        const messageClass = messageVisible ? String((await message.getAttribute('class')) || '') : '';
+        const text = messageVisible ? String((await message.textContent()) || '').trim() : '';
+        return {
+          editorVisible,
+          saveVisible,
+          error: messageClass.split(/\s+/).includes('error'),
+          text,
+        };
+      },
+      (value) => !value.editorVisible || value.saveVisible || value.error,
+      timeout,
+      50,
+    );
+
+    if (result.error) throw new Error(result.text || 'Request update failed.');
   }
 
   async done(): Promise<void> {
     const schema = await this.getSchema();
-    await this.resources.mainReset();
-    await this.restage.click(schema.getByRole('button', { name: 'Done' })); // "Done"
-    await this.resources.mainUpdated();
+
+    const requestDone = schema.locator('#rmlRequestCancel');
+    if (await requestDone.isVisible().catch(() => false)) {
+      await this.doneRequestEditor();
+      return;
+    }
+
+    const done = await this.visibleRmlControl(schema, ['#rmlAssertionDone', '#rmlRulesEditorDone', '#rmlClassVariablesDone']);
+    await this.clickAndWaitForDialogClose(done);
   }
 }

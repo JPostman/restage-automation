@@ -296,14 +296,31 @@ async function waitForVsCodeToClose(cdpEndpoint: string): Promise<void> {
   }
 }
 
-function cleanupRunDirectory(): void {
+function cleanupTemp(): void {
+  const prefixes = ['playwright-artifacts-', 'playwright_chromiumdev_profile-', 'vscode-inno-updater-', 'playwright-transform-cache', 'restage-automation'];
+  let deleted = 0;
+
   try {
-    fs.rmSync(RUN_ROOT, { recursive: true, force: true });
-    log(`Deleted isolated run directory: ${RUN_ROOT}`);
+    for (const entry of fs.readdirSync(TEMP_ROOT, { withFileTypes: true })) {
+      if (!prefixes.some((prefix) => entry.name.startsWith(prefix))) continue;
+
+      const tempPath = path.join(TEMP_ROOT, entry.name);
+      try {
+        fs.rmSync(tempPath, { recursive: true, force: true });
+        deleted++;
+      } catch (error) {
+        // A folder can still be locked briefly while Chromium/Inspector exits.
+        // Temp cleanup is best-effort and must never fail the automation run.
+        log(`Could not delete Playwright temp directory ${tempPath}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   } catch (error) {
-    // Windows may keep a VS Code file handle briefly after process exit.
-    // Every process uses a different directory, so cleanup failure is harmless.
-    log(`Could not delete isolated run directory yet: ${error instanceof Error ? error.message : String(error)}`);
+    log(`Could not scan temp directory ${TEMP_ROOT}: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+
+  if (deleted > 0) {
+    log(`Deleted ${deleted} Playwright temp director${deleted === 1 ? 'y' : 'ies'}.`);
   }
 }
 
@@ -451,7 +468,7 @@ async function main(): Promise<void> {
       await waitForVsCodeToClose(cdpEndpoint);
     }
   } finally {
-    clearRuntimeState();
+    log('Cleanup...');
 
     try {
       await browser.unbind();
@@ -476,7 +493,12 @@ async function main(): Promise<void> {
       }
     }
 
-    cleanupRunDirectory();
+    cleanupTemp();
+
+    // Runtime-state removal is the acknowledgement consumed by the final
+    // Playwright worker. Keep it last so the worker does not continue until
+    // all shared-session cleanup above has finished.
+    clearRuntimeState();
   }
 }
 

@@ -105,18 +105,18 @@ export class Asserts {
     );
   }
 
-  async getJavaFile(): Promise<string> {
-    return this.resources.mainUpdated();
+  getJavaFile(): string {
+    return this.resources.getJavaFile();
   }
 
   async validateInit(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.init() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateChainFolder(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.addChainFolder() + '}';
     assert.strictEqual(actual, expected);
   }

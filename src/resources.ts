@@ -4,7 +4,6 @@ import { ReStage } from './restage.js';
 
 export class Resources {
   readonly root: string;
-  protected previousContent: string = '';
 
   public static DEFAULT_FILE = 'RestageDemoTest.java';
 
@@ -24,18 +23,32 @@ export class Resources {
     return this.source('resources', file);
   }
 
-  main(): string {
-    return this.target('src/test/java/io/restage', Resources.DEFAULT_FILE);
+  main(file: string = Resources.DEFAULT_FILE): string {
+    return this.target('src/test/java/io/restage', file);
+  }
+
+  asserts(file: string = 'asserts.ini'): string {
+    return this.target('src/test/resources', file);
   }
 
   loadPath(paths: string): string {
     return fs.readFileSync(paths, 'utf8');
   }
 
+  deletePath(paths: string): void {
+    if (fs.existsSync(paths)) fs.rmSync(paths);
+  }
+
   writePath(paths: string, data: string | NodeJS.ArrayBufferView): void {
-    if (fs.existsSync(paths)) {
-      fs.writeFileSync(paths, data);
+    if (fs.existsSync(paths)) fs.writeFileSync(paths, data);
+  }
+
+  update(paths: string, before: string, after: string): void {
+    const source = this.loadPath(paths);
+    if (!source.includes(before)) {
+      throw new Error('before was not found.');
     }
+    this.writePath(paths, source.replace(before, after));
   }
 
   check(paths: string): string {
@@ -54,28 +67,11 @@ export class Resources {
     return value.replace(/\r\n/g, '\n').trim();
   }
 
-  async mainReset(): Promise<void> {
-    this.previousContent = this.load(this.main());
+  getJavaFile(): string {
+    return this.load(this.main());
   }
 
-  async mainUpdated(): Promise<string> {
-    return await this.waitFileUpdate(this.main());
-  }
-
-  async waitFileUpdate(paths: string, normalize: boolean = true): Promise<string> {
-    let stableReads = 0;
-    let actual = '';
-    while (stableReads++ < 10) {
-      actual = this.load(paths, normalize);
-      if (actual !== this.previousContent) {
-        return (this.previousContent = actual);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    return actual;
-  }
-
-  tempate(opt?: { addImport?: string; classVars?: string; wrap?: boolean }): string {
+  tempate(opt?: { addImport?: string; extra?: string; wrap?: boolean }): string {
     return (
       this.normalize(
         `
@@ -85,7 +81,7 @@ import io.jpostman.annotations.JPostman;
 ${opt?.addImport || ''}
 @JPostman.TestNG
 public class RestageDemoTest {
-${opt?.classVars || ''}
+${opt?.extra || ''}
     @JPostman.Context
     JPostman.Runtime<JPostman.Test> runtime;
 

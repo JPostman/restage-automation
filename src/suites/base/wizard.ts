@@ -88,27 +88,42 @@ export class Wizard {
     );
 
     const fileTab = this.page.getByRole('tab', { name: Resources.DEFAULT_FILE });
-    if (!(await fileTab.isVisible())) {
-      const workbench = this.page.locator('.monaco-workbench');
-      const projectExplorer = this.page.getByRole('button', { name: 'Project Explorer Section' });
-      const input = this.page.locator('.quick-input-widget:visible input');
+    if (await fileTab.isVisible()) return;
 
-      // Open Project is initiated from a webview. Keyboard focus can remain in
-      // that iframe after VS Code changes workspace, so Ctrl+P is swallowed by
-      // the webview. Explicitly return focus to the workbench and retry while
-      // the reload settles.
-      for (let attempt = 0; attempt < 3 && !(await input.isVisible()); attempt += 1) {
-        await projectExplorer.click({ timeout: 10_000 });
+    const workbench = this.page.locator('.monaco-workbench');
+    const input = this.page.locator('.quick-input-widget:visible input');
+    const deadline = Date.now() + 60_000;
+    let lastError: unknown;
+
+    // Project Explorer can become visible before the new VS Code workbench is
+    // ready to accept Ctrl+P after a workspace reload. Do not treat Explorer
+    // visibility as editor readiness. Keep retrying Quick Open until the Java
+    // tab is actually visible.
+    while (Date.now() < deadline && !(await fileTab.isVisible().catch(() => false))) {
+      try {
+        await workbench.waitFor({ state: 'visible', timeout: 5_000 });
         await workbench.evaluate((element) => (element as HTMLElement).focus());
         await this.page.keyboard.press('Escape');
         await this.page.keyboard.press('Control+P');
-        await input.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined);
-      }
 
-      await input.waitFor({ state: 'visible', timeout: 5_000 });
-      await input.fill(filePath);
-      await input.press('Enter');
+        const remaining = Math.max(1, deadline - Date.now());
+        await input.waitFor({ state: 'visible', timeout: Math.min(5_000, remaining) });
+        await input.fill(filePath);
+        await input.press('Enter');
+
+        await fileTab.waitFor({ state: 'visible', timeout: Math.min(5_000, Math.max(1, deadline - Date.now())) });
+      } catch (error) {
+        lastError = error;
+        await this.page.keyboard.press('Escape').catch(() => undefined);
+        await this.page.waitForTimeout(250);
+      }
     }
+
+    if (!(await fileTab.isVisible().catch(() => false))) {
+      const details = lastError instanceof Error ? ` Last error: ${lastError.message}` : '';
+      throw new Error(`VS Code workspace opened, but ${Resources.DEFAULT_FILE} did not become ready within 60000ms.${details}`);
+    }
+
     await this.restage.waitVisible(fileTab, 60_000);
   }
 }

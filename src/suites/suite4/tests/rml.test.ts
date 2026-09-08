@@ -37,7 +37,6 @@ export class RmlTest extends Rml {
     await this.done();
 
     await this.actions.runTestWithAIEngine();
-    await this.restage.defaultTestMenu();
   }
 
   async addAccessToken(): Promise<void> {

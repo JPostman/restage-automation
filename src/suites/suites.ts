@@ -136,13 +136,23 @@ async function startSession(sessionTarget: string): Promise<ChildProcess> {
   fs.rmSync(STOP_FILE, { force: true });
   fs.rmSync(RUNTIME_STATE, { force: true });
 
+  const sessionEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    RESTAGE_SESSION_ONLY: '1',
+    RESTAGE_TEST_TARGET: sessionTarget,
+  };
+
+  // The Playwright runner may itself be launched under VS Code js-debug.
+  // Do not auto-attach the long-lived ReSTage session owner as another
+  // debugger target; otherwise Node can remain in the debugger shutdown
+  // lifecycle and never reach its cleanup block reliably.
+  delete sessionEnv.NODE_OPTIONS;
+  delete sessionEnv.VSCODE_INSPECTOR_OPTIONS;
+  delete sessionEnv.ELECTRON_RUN_AS_NODE;
+
   const child = spawn(process.execPath, ['--enable-source-maps', path.join(PROJECT_ROOT, 'dist', 'src', 'main.js')], {
     cwd: PROJECT_ROOT,
-    env: {
-      ...process.env,
-      RESTAGE_SESSION_ONLY: '1',
-      RESTAGE_TEST_TARGET: sessionTarget,
-    },
+    env: sessionEnv,
     stdio: 'inherit',
     shell: false,
   });
@@ -223,7 +233,10 @@ let testFailureReported = false;
  * with an Inspector that the developer may intentionally leave open forever.
  */
 export async function inspectTestClassOnComplete(restage: ReStage, testInfo: TestInfo): Promise<void> {
-  if (!inspectOnComplete() || testFailureReported) return;
+  // A beforeAll/setup failure skips the tests and then still executes afterAll.
+  // afterEach never runs in that case, so testFailureReported alone cannot tell
+  // us that setup failed. Do not report that situation as a completed class.
+  if (!inspectOnComplete() || testFailureReported || testInfo.status !== testInfo.expectedStatus) return;
 
   // beforeAll/afterAll have their own timeout. Zero means this completion hook
   // may wait for the developer indefinitely; closing/resuming Inspector lets
@@ -256,7 +269,7 @@ export async function reportTestFailure(restage: ReStage, testInfo: TestInfo): P
     }
   }
 
-  // debugger; // common breakpoint for every failed test
+  debugger; // common breakpoint for every failed test
 
   if (!inspectOnFailure()) {
     console.error('[Test] Inspector disabled for this run. Continuing to the next test.');
@@ -339,9 +352,8 @@ export const test = base.extend<{}, WorkerFixtures>({
       } finally {
         // Completion Inspector is handled by each suite's afterAll hook while
         // Playwright still considers the suite active. Do not block worker
-        // teardown on user interaction. The session owner watches the runner
-        // PID and shuts the UI down only after the whole Playwright run exits.
-        log(`Worker ${workerInfo.workerIndex} finished; keeping the ReSTage UI/session alive until runner shutdown.`);
+        // teardown on user interaction.
+        log(`Worker ${workerInfo.workerIndex} finished.`);
 
         if (doNotDisturbEnabledByFixture) {
           try {
@@ -354,6 +366,36 @@ export const test = base.extend<{}, WorkerFixtures>({
             // test or the next worker when VS Code closes or changes menus.
             log(`Could not restore notifications; ignoring teardown cleanup: ${error instanceof Error ? error.message : String(error)}`);
           }
+        }
+
+        // Do not wait for the top-level runner process to exit before stopping
+        // the shared session. When VS Code's JavaScript debugger is attached,
+        // Node can stay at "Waiting for the debugger to disconnect..." and the
+        // owner process would never reach its finally/cleanup block. The last
+        // configured project is the real end of the Playwright run from the
+        // session's point of view, so request shutdown here.
+        const configuredProjects = suiteProjects();
+        const lastProject = configuredProjects.at(-1)?.name;
+        if (lastProject === projectName) {
+          try {
+            fs.writeFileSync(STOP_FILE, 'stop\n', 'utf8');
+            log(`Final project ${projectName} finished; requested ReSTage session cleanup.`);
+
+            // Keep the final worker alive until the shared session owner has
+            // actually completed cleanup. Without this acknowledgement the
+            // top-level runner can exit first (especially under js-debug),
+            // taking the owner down before it reaches main.ts finally.
+            await waitForRuntimeStateToDisappear(30_000);
+            if (fs.existsSync(RUNTIME_STATE)) {
+              log('Timed out waiting for ReSTage session cleanup to complete.');
+            } else {
+              log('ReSTage session cleanup completed.');
+            }
+          } catch (error) {
+            log(`Could not request ReSTage session cleanup: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        } else {
+          log('Keeping the ReSTage UI/session alive for the next project.');
         }
       }
     },
@@ -369,7 +411,7 @@ export async function prepareTestContext(restage: ReStage, suite: string): Promi
   await restage.click(activityItem);
 
   const actions = restage.page.getByRole('button', { name: 'Actions Section' });
-  const projectExists = await restage.waitExists(actions, suite == SUITE_1 ? 1_000 : 5_000);
+  const projectExists = await restage.waitExists(actions, 1_000);
   if (projectExists) {
     const resources = new Resources(restage);
     const file = restage.page.getByRole('tab', { name: Resources.DEFAULT_FILE });

@@ -9,11 +9,11 @@ export class Asserts {
     this.resources = new Resources(restage);
   }
 
-  addAuthFolderCode(classVars: string = ''): string {
+  addAuthFolderCode(extra: string = ''): string {
     return (
       this.resources.tempate({
         addImport: 'import org.testng.annotations.Test;\n',
-        classVars,
+        extra,
       }) +
       '\n\t' +
       this.resources.normalize(`
@@ -45,15 +45,15 @@ export class Asserts {
     );
   }
 
-  varsLoginUser(classVars: string = ''): string {
+  varsLoginUser(extra: string = ''): string {
     return (
-      this.addAuthFolderCode(classVars + '\n\tprivate final String GET_AUTH = "#auth";' + '\n\tprivate final String LOGIN = "login";\n\n') +
+      this.addAuthFolderCode(extra + '\n\tprivate final String GET_AUTH = "#auth";' + '\n\tprivate final String LOGIN = "login";\n\n') +
       '\n\t' +
       this.resources.normalize(
         `
   @JPostman.Response(
 		id = GET_AUTH,\n\t\t` +
-          (classVars
+          (extra
             ? `tags = LOGIN,
 		dependsOn = LOGIN_REQ`
             : `folder = "Auth",
@@ -65,13 +65,13 @@ export class Asserts {
 		JPostman.Test test = runtime.test();
 		JPostman.Info info = runtime.info();
 	
-		JPostman.Ref<String> accessToken = info.ref(test.path("accessToken"));
+		JPostman.Ref<String> accessToken = info.ref(test.path("/accessToken"));
 	
 		test.secret("accessToken",
 			accessToken.get());
 	
 		test.secret("refreshToken",
-			test.path("refreshToken"));
+			test.path("/refreshToken"));
 	
 		test.plain("username",
 			test.get("{{username}}"));
@@ -81,14 +81,14 @@ export class Asserts {
     );
   }
 
-  addAuthUser(classVars: string = '', body: string = ''): string {
+  addAuthUser(extra: string = '', body: string = ''): string {
     return (
-      this.varsLoginUser(classVars + '\n\tprivate final String LOGIN_REQ = "#login";') +
+      this.varsLoginUser(extra + '\n\tprivate final String LOGIN_REQ = "#login";') +
       '\n\t' +
       this.resources.normalize(
         `
   @JPostman.Response(\n\t\t` +
-          (classVars
+          (extra
             ? `dependsOn = SET_AUTH`
             : `folder = "Auth",
 		request = "Get Auth User"`) +
@@ -115,9 +115,9 @@ export class Asserts {
     );
   }
 
-  authUserRequestBody(classVars: string = ''): string {
+  authUserRequestBody(extra: string = ''): string {
     return this.addAuthUser(
-      classVars,
+      extra,
       `\t\tinfo.body("username",
 			test.get("username"));\n`,
     );
@@ -185,54 +185,54 @@ export class Asserts {
     );
   }
 
-  async getJavaFile(): Promise<string> {
-    return this.resources.mainUpdated();
+  getJavaFile(): string {
+    return this.resources.getJavaFile();
   }
 
   async validateAddAuthFolder(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.addAuthFolderCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateUpdateLoginUser(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.updateLoginUser() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateVarsLoginUser(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.varsLoginUser() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddAuthUser(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.addAuthUser() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAuthUserRequestBody(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.authUserRequestBody() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateCreateAuthRequest(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.createAuthRequest() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateCreateAuthToken(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.createAuthToken() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddRefreshToken(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.addRefreshToken() + '}';
     assert.strictEqual(actual, expected);
   }

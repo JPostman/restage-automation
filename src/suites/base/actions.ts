@@ -33,8 +33,26 @@ export class Actions {
   }
 
   async runTestWithAIEngine(): Promise<void> {
-    const menu = this.page.getByRole('button', { name: 'ReSTage action: Run Test with AI Engine' });
-    await this.restage.click(menu);
+    const run = this.page.getByRole('button', { name: 'ReSTage action: Run Test with AI Engine' });
+    const stop = this.page.getByRole('button', { name: 'ReSTage action: Stop Test Execution' });
+
+    await this.restage.click(run);
+    await this.restage.defaultTestMenu();
+
+    // Clicking a VS Code TreeView action only waits for the UI click. Engine-AI
+    // continues asynchronously after /api/tests/runs returns 202. Wait for the
+    // Actions item to enter the running state and then return to the normal Run
+    // state before allowing the next Playwright step/test to modify RML.
+    await this.restage.waitVisible(stop, 20_000);
+    await this.restage.waitFor(
+      async () => ({
+        running: await stop.isVisible().catch(() => false),
+        ready: await run.isVisible().catch(() => false),
+      }),
+      (state) => !state.running && state.ready,
+      120_000,
+      100,
+    );
   }
 
   async runMavenTest(): Promise<void> {

@@ -94,6 +94,15 @@ export class ReStage {
     await locator.waitFor({ state: 'visible', timeout });
   }
 
+  async waitEnabled(locator: Locator, timeout = DEFAULT_TIMEOUT_MS): Promise<void> {
+    log(`wait enabled ${show(locator)} timeout=${timeout}ms`);
+    await this.waitFor(
+      () => locator.isEnabled(),
+      (enabled) => enabled,
+      timeout,
+    );
+  }
+
   async waitExists(locator: Locator, timeout = DEFAULT_TIMEOUT_MS): Promise<boolean> {
     log(`wait exists ${show(locator)} timeout=${timeout}ms`);
     try {
@@ -298,6 +307,17 @@ export class ReStage {
     await this.sleep();
     if (await this.exists(defaultTest)) {
       await this.click(defaultTest);
+    }
+  }
+
+  async expand(name: string): Promise<void> {
+    const item = this.page.locator('.monaco-list-row', {
+      has: this.page.getByText(name, { exact: true }),
+    });
+    const twistie = item.locator('.monaco-tl-twistie');
+    const expanded = await item.getAttribute('aria-expanded');
+    if (expanded !== 'true') {
+      await twistie.click();
     }
   }
 }

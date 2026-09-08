@@ -73,7 +73,9 @@
         "suite1",
         "suite2",
         "suite3",
-        "suite4"
+        "suite4",
+        "suite5",
+        "suite6"
       ],
       "default": "suite1"
     }

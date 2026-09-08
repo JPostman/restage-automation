@@ -117,53 +117,53 @@ export class Asserts {
     );
   }
 
-  async getJavaFile(): Promise<string> {
-    return this.resources.mainUpdated();
+  getJavaFile(): string {
+    return this.resources.getJavaFile();
   }
 
   async validateWizardCreated(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.resources.tempate() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddAuthFolder(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.addAuthFolderCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddLoginCache(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.addLoginCacheCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateCreateSetToken(): Promise<void> {
     const expected = this.createSetToken() + '}';
-    let actual = await this.getJavaFile();
+    let actual = this.getJavaFile();
     let count = 0;
     while (count++ < 5 && actual != expected) {
-      actual = await this.getJavaFile();
+      actual = this.getJavaFile();
       await this.restage.sleep();
     }
     assert.strictEqual(actual, expected);
   }
 
   async validateSetToken(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.updateSetToken() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddAuthUser(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.addAuthUserCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddRefreshToken(): Promise<void> {
-    const actual = await this.getJavaFile();
+    const actual = this.getJavaFile();
     const expected = this.addRefreshTokenCode() + '}';
     assert.strictEqual(actual, expected);
   }
