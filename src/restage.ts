@@ -49,7 +49,7 @@ export class ReStage {
     return (await locator.count()) > 0;
   }
 
-  async visible(locator: Locator, button: 'left' | 'right' | 'middle' = 'left'): Promise<boolean> {
+  async visible(locator: Locator): Promise<boolean> {
     log(`visible ${show(locator)}`);
     return await locator.isVisible();
   }
@@ -303,11 +303,12 @@ export class ReStage {
   }
 
   async defaultTestMenu(): Promise<void> {
-    const defaultTest = this.page.getByText('Defaultmvn clean test');
-    await this.sleep();
-    if (await this.exists(defaultTest)) {
-      await this.click(defaultTest);
-    }
+    // VS Code keeps old command-palette/tree menu DOM nodes around after they
+    // are hidden. Always bind to the currently visible Default command so a
+    // stale hidden match cannot win the click.
+    const defaultTest = this.page.getByText('Defaultmvn clean test').filter({ visible: true }).first();
+    await this.waitVisible(defaultTest, ACTION_TIMEOUT_MS);
+    await this.click(defaultTest);
   }
 
   async expand(name: string): Promise<void> {
@@ -319,5 +320,10 @@ export class ReStage {
     if (expanded !== 'true') {
       await twistie.click();
     }
+  }
+
+  async testLog(): Promise<string> {
+    const testLog = await this.waitFrameLocator('Test Output', 'body');
+    return (await testLog.locator('body').innerText()).trim();
   }
 }

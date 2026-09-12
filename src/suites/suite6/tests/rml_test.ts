@@ -47,7 +47,7 @@ export class RmlTest extends Rml {
     await this.restage.click(schema.locator('#rmlAssertionFileValuePicker'));
     await this.restage.click(schema.getByRole('menuitem', { name: 'Response Key Select a key' }));
     await this.restage.click(schema.getByRole('button', { name: /username.*/ }));
-    await this.restage.click(schema.getByRole('button', { name: 'Select Response Key, Class' }));
+    await this.restage.click(schema.getByRole('button', { name: 'Select Response Key, Variable' }));
     await this.restage.click(schema.getByRole('menuitem', { name: 'Environments' }));
     await this.restage.click(schema.getByRole('menuitem', { name: /{{username}}.*/ }));
     await this.restage.fill(schema.locator('#rmlAssertionFileMessage'), 'Invalid access token'); // Message

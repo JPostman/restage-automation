@@ -117,53 +117,53 @@ export class Asserts {
     );
   }
 
-  getJavaFile(): string {
-    return this.resources.getJavaFile();
+  javaContext(): string {
+    return this.resources.javaContext();
   }
 
   async validateWizardCreated(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.resources.tempate() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddAuthFolder(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addAuthFolderCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddLoginCache(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addLoginCacheCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateCreateSetToken(): Promise<void> {
     const expected = this.createSetToken() + '}';
-    let actual = this.getJavaFile();
+    let actual = this.javaContext();
     let count = 0;
     while (count++ < 5 && actual != expected) {
-      actual = this.getJavaFile();
+      actual = this.javaContext();
       await this.restage.sleep();
     }
     assert.strictEqual(actual, expected);
   }
 
   async validateSetToken(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.updateSetToken() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddAuthUser(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addAuthUserCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddRefreshToken(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addRefreshTokenCode() + '}';
     assert.strictEqual(actual, expected);
   }

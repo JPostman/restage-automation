@@ -185,72 +185,72 @@ export class Asserts {
 	`);
   }
 
-  getJavaFile(): string {
-    return this.resources.getJavaFile();
+  javaContext(): string {
+    return this.resources.javaContext();
   }
 
   async validateInit(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.init() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateDisableRunner(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.disableRunner() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddPath(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addPath() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validatePathUsername(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.pathUsername() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddIsEqual(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addIsEqual() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddIsTrue(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addIsTrue() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddIsFalse(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addIsFalse() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddIsNull(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addIsNull() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddNotCondition(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addNotCondition() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddAllMatch(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addAllMatch() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddAnyMatch(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addAnyMatch() + '}';
     assert.strictEqual(actual, expected);
   }

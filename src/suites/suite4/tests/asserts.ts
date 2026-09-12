@@ -105,18 +105,18 @@ export class Asserts {
     );
   }
 
-  getJavaFile(): string {
-    return this.resources.getJavaFile();
+  javaContext(): string {
+    return this.resources.javaContext();
   }
 
   async validateInit(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.init() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateChainFolder(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addChainFolder() + '}';
     assert.strictEqual(actual, expected);
   }

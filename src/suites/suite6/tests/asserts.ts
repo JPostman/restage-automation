@@ -60,24 +60,24 @@ export class Asserts {
     );
   }
 
-  getJavaFile(): string {
-    return this.resources.getJavaFile();
+  javaContext(): string {
+    return this.resources.javaContext();
   }
 
   async validateInit(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.init() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateDisableRunner(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.disableRunner() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddRules(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addRules() + '}';
     assert.strictEqual(actual, expected);
   }

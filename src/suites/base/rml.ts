@@ -155,8 +155,11 @@ export class Rml {
     await this.restage.click(item);
   }
 
-  /** Returns the first result's response body log, not the displayed headers. */
-  async runTestDialog(): Promise<string> {
+  /**
+   * Returns the first result's response body by default.
+   * Pass "result" to return the complete visible Test Result text instead.
+   */
+  async runTestDialog(output: 'response' | 'result' | 'error' = 'response'): Promise<string> {
     const schema = await this.getSchema();
     await this.restage.defaultTestMenu();
     const dialog = schema.locator('#rmlRunResultDialog'); // "Test Result"
@@ -182,14 +185,20 @@ export class Rml {
     if (await responseUnresolved.isEnabled()) {
       await this.restage.check(responseUnresolved);
     }
-    // Read stored evidence: switching Headers on replaces the visible <pre> content.
+    // Capture the complete visible result before switching Headers on, because
+    // switching Headers replaces the visible request/response <pre> content.
+    const testOutput = String((await result.innerText()) || '').trim();
     const responseLog = (await schema.locator('.rml-run-response-evidence').getAttribute('data-body')) || '';
+    const errorEvidence = result.locator('.rml-run-error-evidence').first();
+    const errorLog = (await errorEvidence.count()) > 0 ? String((await errorEvidence.getAttribute('data-error')) || (await errorEvidence.textContent()) || '').trim() : '';
     await this.restage.check(result.locator('.rml-run-response-headers')); // "Show response headers" / "Headers"
     await this.restage.check(result.locator('.rml-run-request-headers')); // "Show request headers" / "Headers"
     await this.restage.click(requestSection.locator(':scope > summary > .rml-run-chevron'));
     await this.restage.click(result.locator(':scope > summary > .rml-run-chevron'));
     await this.restage.click(schema.locator('#rmlRunResultMinimize')); // "Minimize dialog"
     await this.restage.click(schema.locator('#rmlRunResultCloseIcon')); // "Close test result"
+    if (output === 'result') return testOutput;
+    if (output === 'error') return errorLog;
     return responseLog;
   }
 

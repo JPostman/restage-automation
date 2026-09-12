@@ -67,7 +67,7 @@ export class Resources {
     return value.replace(/\r\n/g, '\n').trim();
   }
 
-  getJavaFile(): string {
+  javaContext(): string {
     return this.load(this.main());
   }
 

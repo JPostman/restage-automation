@@ -8,6 +8,7 @@ import { ReStage } from './restage.js';
 import { testTarget } from './suites/suite-config.js';
 
 const TIMEOUT_MS = 60_000;
+const STARTUP_DIAGNOSTIC_INTERVAL_MS = 5_000;
 const ACTION_DELAY_MS = Number(process.env.RESTAGE_ACTION_DELAY_MS ?? '0');
 const PROJECT_ROOT = process.cwd();
 const VSIX_PATH = path.join(PROJECT_ROOT, 'restage-studio.vsix');
@@ -21,6 +22,7 @@ const EXTENSIONS_DIR = path.join(RUN_ROOT, 'extensions');
 const VSCODE_SETTINGS = path.join(PROJECT_ROOT, '.vscode', 'settings.json');
 const RUNTIME_STATE = path.join(PROJECT_ROOT, '.restage-automation.json');
 const STOP_FILE = path.join(PROJECT_ROOT, '.restage-test-stop');
+const INSPECTOR_ACTIVE_FILE = path.join(PROJECT_ROOT, '.restage-inspector-active');
 const TEST_RUNNER_PID = Number(process.env.RESTAGE_TEST_RUNNER_PID ?? '');
 
 function log(message: string): void {
@@ -36,6 +38,20 @@ function isProcessRunning(pid: number): boolean {
   } catch {
     return false;
   }
+}
+
+function inspectorActive(): boolean {
+  if (!fs.existsSync(INSPECTOR_ACTIVE_FILE)) return false;
+
+  try {
+    const pid = Number(fs.readFileSync(INSPECTOR_ACTIVE_FILE, 'utf8').trim());
+    if (isProcessRunning(pid)) return true;
+  } catch {
+    // Treat unreadable markers as stale.
+  }
+
+  fs.rmSync(INSPECTOR_ACTIVE_FILE, { force: true });
+  return false;
 }
 
 const BENIGN_VSCODE_LOG_PATTERNS: RegExp[] = [
@@ -236,20 +252,100 @@ async function waitUntil<T>(probe: () => Promise<T | null>, message: string): Pr
 }
 
 async function workbenchPage(browser: Browser): Promise<Page> {
-  return await waitUntil(async () => {
-    const pages = browser.contexts().flatMap((context: BrowserContext) => context.pages());
-    for (const page of pages) {
-      if (page.isClosed()) continue;
-      if (
-        await page
+  const startedAt = Date.now();
+  let nextDiagnosticAt = startedAt;
+
+  log('Waiting for VS Code workbench page...');
+
+  return await waitUntil(
+    async () => {
+      const contexts = browser.contexts();
+      const pages = contexts.flatMap((context: BrowserContext) => context.pages());
+
+      for (const page of pages) {
+        if (page.isClosed()) continue;
+        const workbenchCount = await page
           .locator('.monaco-workbench')
           .count()
-          .catch(() => 0)
-      )
-        return page;
-    }
-    return null;
-  }, 'Connected to VS Code CDP, but the workbench page was not found.');
+          .catch(() => 0);
+        if (workbenchCount > 0) {
+          log(`VS Code workbench ready after ${Math.round((Date.now() - startedAt) / 1000)}s: ${page.url() || '<no-url>'}`);
+          return page;
+        }
+      }
+
+      if (Date.now() >= nextDiagnosticAt) {
+        nextDiagnosticAt = Date.now() + STARTUP_DIAGNOSTIC_INTERVAL_MS;
+        const pageDetails = await Promise.all(
+          pages.map(async (page, index) => {
+            if (page.isClosed()) return `page${index + 1}=<closed>`;
+            const title = await page.title().catch(() => '<title-unavailable>');
+            const workbenchCount = await page
+              .locator('.monaco-workbench')
+              .count()
+              .catch(() => 0);
+            return `page${index + 1}={title=${JSON.stringify(title)}, url=${JSON.stringify(page.url())}, workbench=${workbenchCount}}`;
+          }),
+        );
+
+        log(
+          `VS Code workbench not ready after ${Math.round((Date.now() - startedAt) / 1000)}s: ` +
+            `contexts=${contexts.length}, pages=${pages.length}` +
+            (pageDetails.length ? `, ${pageDetails.join(', ')}` : ', no CDP pages published yet'),
+        );
+      }
+
+      return null;
+    },
+    `Connected to VS Code CDP, but the workbench page was not found within ${Math.round(TIMEOUT_MS / 1000)} seconds.`,
+  );
+}
+
+async function logRemoteEngineStatus(): Promise<void> {
+  const settings = readWorkspaceReStageSettings();
+  if (settings['restageStudio.engine.mode'] !== 'remote') return;
+
+  const serverUrl = String(settings['restageStudio.engine.serverUrl'] ?? '').trim();
+  if (!serverUrl) {
+    console.error('[Main Error] Remote ReSTage engine mode is enabled, but restageStudio.engine.serverUrl is empty.');
+    return;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(serverUrl);
+  } catch {
+    console.error(`[Main Error] Remote ReSTage engine URL is invalid: ${serverUrl}`);
+    return;
+  }
+
+  const host = parsed.hostname;
+  const port = Number(parsed.port || (parsed.protocol === 'https:' ? '443' : '80'));
+  const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+    const socket = net.createConnection({ host, port });
+    let settled = false;
+
+    const finish = (ok: boolean, error?: string): void => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve({ ok, error });
+    };
+
+    socket.setTimeout(2_000);
+    socket.once('connect', () => finish(true));
+    socket.once('timeout', () => finish(false, 'connection timed out'));
+    socket.once('error', (error) => finish(false, error.message));
+  });
+
+  if (result.ok) {
+    log(`Remote ReSTage engine is reachable at ${serverUrl}.`);
+  } else {
+    console.error(
+      `[Main Error] Remote ReSTage engine is NOT reachable at ${serverUrl}: ${result.error ?? 'connection failed'}. ` +
+        'Start Engine-AI or correct the workspace server URL before waiting for Studio startup.',
+    );
+  }
 }
 
 function writeRuntimeState(cdpEndpoint: string, playwrightEndpoint: string, vscodePid: number | undefined): void {
@@ -338,6 +434,7 @@ async function main(): Promise<void> {
   // doing this after spawn leaves the running window without ReSTage loaded.
   prepareTempProject();
   installVsix();
+  await logRemoteEngineStatus();
 
   const vscodePath = discoverVsCode();
   const cdpPort = await freePort();
@@ -375,12 +472,21 @@ async function main(): Promise<void> {
     shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  child.once('error', (error) => {
+    console.error(`[Main Error] VS Code process could not start: ${error.message}`);
+  });
+  child.once('exit', (code, signal) => {
+    const detail = `code=${code ?? '<none>'}, signal=${signal ?? '<none>'}`;
+    if (code === 0) log(`VS Code process exited (${detail}).`);
+    else console.error(`[Main Error] VS Code process exited unexpectedly (${detail}).`);
+  });
   const stdoutLog = vscodeLogSink();
   const stderrLog = vscodeLogSink();
   child.stdout?.on('data', stdoutLog);
   child.stderr?.on('data', stderrLog);
 
   const cdpEndpoint = `http://127.0.0.1:${cdpPort}`;
+  log(`Waiting for VS Code CDP endpoint: ${cdpEndpoint}`);
   await waitUntil(async () => {
     if (child.exitCode !== null) throw new Error(`VS Code exited early with code ${child.exitCode}.`);
     try {
@@ -390,6 +496,7 @@ async function main(): Promise<void> {
       return null;
     }
   }, `VS Code did not expose CDP at ${cdpEndpoint}.`);
+  log(`VS Code CDP endpoint is ready: ${cdpEndpoint}`);
 
   const browser = await chromium.connectOverCDP(cdpEndpoint, {
     timeout: TIMEOUT_MS,
@@ -405,6 +512,7 @@ async function main(): Promise<void> {
     workspaceDir: PROJECT_ROOT,
   });
   log(`Playwright Inspector endpoint published: ${browserBinding.endpoint}`);
+  log(`Connected browser currently has ${browser.contexts().length} context(s) and ${browser.contexts().flatMap((context) => context.pages()).length} page(s).`);
 
   let restage: ReStage | undefined;
 
@@ -419,13 +527,34 @@ async function main(): Promise<void> {
     }
 
     log('ReSTage session ready for Playwright Test.');
-    while (!fs.existsSync(STOP_FILE)) {
+    let inspectorHoldLogged = false;
+
+    while (true) {
       await new Promise((resolve) => setTimeout(resolve, 250));
 
-      // A Playwright failure can replace the worker process, and Suite 2 runs
-      // in another worker/project. Keep this owner/UI alive through those
-      // transitions; only the top-level Playwright runner ending shuts it down.
+      const inspectorIsActive = inspectorActive();
+      if (inspectorIsActive) {
+        if (!inspectorHoldLogged) {
+          log('Playwright Inspector is active; deferring ReSTage session shutdown and keeping VS Code open until Resume/close Inspector.');
+          inspectorHoldLogged = true;
+        }
+      } else if (inspectorHoldLogged) {
+        log('Playwright Inspector is no longer active; normal shutdown rules are restored.');
+        inspectorHoldLogged = false;
+      }
+
+      // Final-project teardown can request shutdown while a failed-test
+      // Inspector is still open. Keep the exact failed UI state alive until
+      // the developer explicitly resumes/closes Inspector.
+      if (fs.existsSync(STOP_FILE)) {
+        if (inspectorIsActive) continue;
+        break;
+      }
+
+      // A Playwright failure can replace or finish the runner while Inspector
+      // is still being used. Do not let that runner exit close VS Code.
       if (Number.isInteger(TEST_RUNNER_PID) && TEST_RUNNER_PID > 0 && !isProcessRunning(TEST_RUNNER_PID)) {
+        if (inspectorIsActive) continue;
         log('Playwright Test runner exited; shutting down the shared ReSTage session.');
         break;
       }
@@ -498,6 +627,7 @@ async function main(): Promise<void> {
     // Runtime-state removal is the acknowledgement consumed by the final
     // Playwright worker. Keep it last so the worker does not continue until
     // all shared-session cleanup above has finished.
+    fs.rmSync(INSPECTOR_ACTIVE_FILE, { force: true });
     clearRuntimeState();
   }
 }

@@ -185,54 +185,54 @@ export class Asserts {
     );
   }
 
-  getJavaFile(): string {
-    return this.resources.getJavaFile();
+  javaContext(): string {
+    return this.resources.javaContext();
   }
 
   async validateAddAuthFolder(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addAuthFolderCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateUpdateLoginUser(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.updateLoginUser() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateVarsLoginUser(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.varsLoginUser() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddAuthUser(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addAuthUser() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAuthUserRequestBody(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.authUserRequestBody() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateCreateAuthRequest(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.createAuthRequest() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateCreateAuthToken(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.createAuthToken() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddRefreshToken(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addRefreshToken() + '}';
     assert.strictEqual(actual, expected);
   }

@@ -17,6 +17,7 @@ const TEMP_ROOT = process.env.TEMP || process.env.TMPDIR || process.env.TMP || o
 const DEMO_PROJECT = path.join(TEMP_ROOT, 'restage-demo');
 const RUNTIME_STATE = path.join(PROJECT_ROOT, '.restage-automation.json');
 const STOP_FILE = path.join(PROJECT_ROOT, '.restage-test-stop');
+const INSPECTOR_ACTIVE_FILE = path.join(PROJECT_ROOT, '.restage-inspector-active');
 const TEST_RUNNER_PID_ENV = 'RESTAGE_TEST_RUNNER_PID';
 
 function actionDelayMs(): number {
@@ -135,6 +136,7 @@ async function startSession(sessionTarget: string): Promise<ChildProcess> {
 
   fs.rmSync(STOP_FILE, { force: true });
   fs.rmSync(RUNTIME_STATE, { force: true });
+  fs.rmSync(INSPECTOR_ACTIVE_FILE, { force: true });
 
   const sessionEnv: NodeJS.ProcessEnv = {
     ...process.env,
@@ -204,8 +206,27 @@ async function openInspector(): Promise<void> {
       shell: false,
     });
 
-    child.once('error', reject);
+    // The shared ReSTage session owner watches this marker and must not close
+    // VS Code while the developer is using Playwright Inspector.
+    if (child.pid) {
+      fs.writeFileSync(INSPECTOR_ACTIVE_FILE, `${child.pid}\n`, 'utf8');
+    }
+
+    const clearInspectorMarker = (): void => {
+      try {
+        fs.rmSync(INSPECTOR_ACTIVE_FILE, { force: true });
+      } catch {
+        // Best-effort cross-process coordination only.
+      }
+    };
+
+    child.once('error', (error) => {
+      clearInspectorMarker();
+      reject(error);
+    });
     child.once('exit', (code, signal) => {
+      clearInspectorMarker();
+
       // 0xC000013A is Windows STATUS_CONTROL_C_EXIT. Closing an Inspector
       // window can end the helper this way; it does not mean the test error
       // itself was lost.
@@ -213,6 +234,30 @@ async function openInspector(): Promise<void> {
       else reject(new Error(`Playwright Inspector exited unexpectedly (code=${code ?? '<none>'}, signal=${signal ?? '<none>'}).`));
     });
   });
+}
+
+function inspectorActive(): boolean {
+  if (!fs.existsSync(INSPECTOR_ACTIVE_FILE)) return false;
+
+  try {
+    const pid = Number(fs.readFileSync(INSPECTOR_ACTIVE_FILE, 'utf8').trim());
+    if (isProcessRunning(pid)) return true;
+  } catch {
+    // Treat unreadable markers as stale.
+  }
+
+  fs.rmSync(INSPECTOR_ACTIVE_FILE, { force: true });
+  return false;
+}
+
+async function waitForInspectorToFinish(): Promise<void> {
+  if (!inspectorActive()) return;
+
+  log('Playwright Inspector is still open; keeping VS Code and the ReSTage session alive until you press Resume/close Inspector.');
+  while (inspectorActive()) {
+    await delay(250);
+  }
+  log('Playwright Inspector finished; session cleanup can continue.');
 }
 
 function inspectOnFailure(): boolean {
@@ -269,7 +314,7 @@ export async function reportTestFailure(restage: ReStage, testInfo: TestInfo): P
     }
   }
 
-  debugger; // common breakpoint for every failed test
+  // debugger; // common breakpoint for every failed test
 
   if (!inspectOnFailure()) {
     console.error('[Test] Inspector disabled for this run. Continuing to the next test.');
@@ -378,6 +423,11 @@ export const test = base.extend<{}, WorkerFixtures>({
         const lastProject = configuredProjects.at(-1)?.name;
         if (lastProject === projectName) {
           try {
+            // A failed test can enter Inspector while Playwright is already
+            // tearing down the worker. Never let final-project cleanup close
+            // the Inspector or VS Code underneath the developer.
+            await waitForInspectorToFinish();
+
             fs.writeFileSync(STOP_FILE, 'stop\n', 'utf8');
             log(`Final project ${projectName} finished; requested ReSTage session cleanup.`);
 
@@ -399,7 +449,7 @@ export const test = base.extend<{}, WorkerFixtures>({
         }
       }
     },
-    { scope: 'worker', timeout: 180_000 },
+    { scope: 'worker', timeout: 0 },
   ],
 });
 

@@ -178,54 +178,54 @@ export class Asserts {
     );
   }
 
-  getJavaFile(): string {
-    return this.resources.getJavaFile();
+  javaContext(): string {
+    return this.resources.javaContext();
   }
 
   async validateAddAuthFolder(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addAuthFolderCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddLoginCache(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addLoginCacheCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddLoginUser(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addLoginUserCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddAuthUser(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addAuthUserCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateUserDependencies(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addAuthRequest() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddRefreshToken(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addRefreshTokenCode() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateRefreshDependencies(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addRefreshTokenAuth() + '}';
     assert.strictEqual(actual, expected);
   }
 
   async validateAddRefreshBody(): Promise<void> {
-    const actual = this.getJavaFile();
+    const actual = this.javaContext();
     const expected = this.addRefreshBody() + '}';
     assert.strictEqual(actual, expected);
   }
